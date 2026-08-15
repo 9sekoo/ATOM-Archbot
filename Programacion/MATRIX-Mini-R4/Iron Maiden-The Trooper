@@ -1,0 +1,2140 @@
+#include <Arduino.h>
+#include <MatrixMiniR4.h>
+
+struct Note {
+  uint16_t frequency;
+  uint16_t duration;
+};
+
+constexpr uint16_t NOTE_REST = 0;
+
+constexpr uint16_t MIDI_PREROLL_MS = 1500;
+
+constexpr uint16_t START_DELAY_MS = 0;
+
+constexpr uint16_t TIME_SCALE_PERMILLE = 1000;
+
+constexpr uint8_t RGB_BRIGHTNESS = 255;
+
+constexpr bool BUZZER_AUDIBILITY_BOOST = true;
+constexpr uint16_t AUDIBILITY_BOOST_BELOW_HZ = 260;
+
+constexpr uint16_t OLED_FRAME_MS = 120;
+constexpr uint16_t OLED_SWAP_MS = 5000;
+constexpr uint16_t OLED_BOB_MS = 120;
+constexpr uint16_t OLED_TRANSITION_MS = 420;
+
+constexpr uint32_t OLED_GUARD_US = 20000UL;
+
+constexpr uint32_t RGB_HIT_US = 42000UL;
+constexpr uint32_t RGB_AFTERGLOW_US = 90000UL;
+
+const uint8_t ironMaidenLogo[] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x7F, 0x3F, 0x00, 0x7C, 0x1F, 0x0E, 0x03, 0xE1, 0xF8, 0x3E, 0x0F, 0xCF, 0xE0, 0x7F, 0x9F, 0x1E,
+  0x7F, 0x3F, 0xC0, 0xFE, 0x1F, 0x0F, 0x03, 0xF1, 0xF8, 0x3F, 0x1F, 0xCF, 0xF0, 0x7F, 0x9F, 0x1E,
+  0x7F, 0x3F, 0xC1, 0xFF, 0x1F, 0x8F, 0x03, 0xF1, 0xF8, 0x3F, 0x1F, 0xCF, 0xF8, 0x7F, 0x9F, 0x1E,
+  0x7F, 0x3F, 0xE1, 0xFF, 0x1F, 0x8F, 0x03, 0xF1, 0xF8, 0x7F, 0x0F, 0xCF, 0xFC, 0x7F, 0x9F, 0x1E,
+  0x3E, 0x3F, 0xE3, 0xFF, 0x9F, 0x8F, 0x03, 0xF1, 0xF8, 0x7F, 0x07, 0x8F, 0xFC, 0x7F, 0x9F, 0x9E,
+  0x3C, 0x3D, 0xE3, 0xEF, 0x9F, 0x8F, 0x03, 0xF1, 0xF8, 0x7F, 0x07, 0x8F, 0x3E, 0x78, 0x1F, 0x9E,
+  0x3E, 0x3D, 0xE3, 0xC7, 0x9F, 0xCF, 0x03, 0xF3, 0xF8, 0x7F, 0x07, 0x8F, 0x3E, 0x78, 0x1F, 0x9E,
+  0x3E, 0x3D, 0xF7, 0xC7, 0x9F, 0xCF, 0x03, 0xF3, 0xF8, 0x7F, 0x07, 0x8F, 0x1E, 0x78, 0x1F, 0xDE,
+  0x3E, 0x3D, 0xE7, 0xC7, 0x9F, 0xCF, 0x03, 0xFB, 0xF8, 0x77, 0x87, 0x8F, 0x1E, 0x78, 0x1F, 0xDE,
+  0x3E, 0x3D, 0xE7, 0xC7, 0x9F, 0xEF, 0x03, 0xFB, 0xF8, 0x77, 0x87, 0x8F, 0x1E, 0x7F, 0x9F, 0xDE,
+  0x3E, 0x3F, 0xE7, 0x87, 0x9F, 0xEF, 0x03, 0xFB, 0xF8, 0xF7, 0x87, 0x8F, 0x1E, 0x7F, 0x9F, 0xDE,
+  0x3E, 0x3F, 0xE7, 0x87, 0x9F, 0xEF, 0x03, 0xFB, 0xF8, 0xF7, 0x87, 0x8F, 0x1E, 0x7F, 0x9F, 0xFE,
+  0x3E, 0x3F, 0xC7, 0x87, 0x9E, 0xFF, 0x03, 0xFF, 0xF8, 0xF7, 0x87, 0x8F, 0x1E, 0x7F, 0x9F, 0xFE,
+  0x3E, 0x3F, 0xC7, 0x87, 0x9E, 0xFF, 0x03, 0xBF, 0x78, 0xF3, 0x87, 0x8F, 0x1E, 0x7F, 0x9E, 0xFE,
+  0x3E, 0x3F, 0xC7, 0xC7, 0x9E, 0xFF, 0x03, 0xBF, 0x78, 0xFF, 0xC7, 0x8F, 0x1E, 0x78, 0x1E, 0xFE,
+  0x3E, 0x3F, 0xC7, 0xC7, 0x9E, 0x7F, 0x03, 0xBF, 0x78, 0xFF, 0xC7, 0x8F, 0x1E, 0x78, 0x1E, 0xFE,
+  0x3E, 0x3F, 0xC3, 0xC7, 0x9E, 0x7F, 0x03, 0x9F, 0x79, 0xFF, 0xC7, 0x8F, 0x1E, 0x78, 0x1E, 0xFE,
+  0x3E, 0x3D, 0xE3, 0xC7, 0x9E, 0x7F, 0x03, 0x9F, 0x79, 0xFF, 0xC7, 0x8F, 0x3E, 0x78, 0x1E, 0x7E,
+  0x3C, 0x3D, 0xE3, 0xEF, 0x9E, 0x7F, 0x03, 0x9F, 0x79, 0xFF, 0xC7, 0x8F, 0x7C, 0x78, 0x1E, 0x7E,
+  0x3E, 0x3D, 0xE3, 0xFF, 0x9E, 0x3F, 0x03, 0x9F, 0x79, 0xE3, 0xC7, 0x8F, 0xFC, 0x7F, 0x9E, 0x7E,
+  0x7F, 0x3D, 0xF1, 0xFF, 0x1E, 0x3F, 0x03, 0x9E, 0x79, 0xE3, 0xEF, 0xCF, 0xF8, 0x7F, 0x9E, 0x7E,
+  0x7F, 0x3C, 0xF1, 0xFF, 0x1E, 0x3F, 0x03, 0x9E, 0x79, 0xE1, 0xFF, 0xCF, 0xF8, 0x7F, 0x9E, 0x3E,
+  0x7F, 0x3C, 0xF0, 0xFE, 0x1E, 0x3F, 0x03, 0x8E, 0x7B, 0xE1, 0xFF, 0xCF, 0xF0, 0x7F, 0x9E, 0x3E,
+  0x7F, 0x3C, 0xF0, 0x7C, 0x1E, 0x1E, 0x03, 0x8E, 0x7B, 0xE1, 0xFF, 0xCF, 0xE0, 0x7F, 0x9E, 0x3E,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+
+const uint8_t eddieRefBitmap[] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x04, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+  0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x40, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08,
+  0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x40, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0xF0, 0x04, 0x80, 0x78, 0x00, 0x00, 0x00, 0x00, 0xFC, 0x03,
+  0x03, 0xFC, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x80, 0x3F, 0xFE, 0x00, 0x00,
+  0x00, 0x00, 0xFD, 0xF8, 0xFC, 0xFE, 0x00, 0x00, 0x00, 0x00, 0xFD, 0xF0,
+  0x3C, 0xFE, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xF0, 0x1F, 0xFC, 0x00, 0x00,
+  0x00, 0x00, 0xFF, 0xC0, 0x07, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x3C, 0x01,
+  0x03, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E, 0xE0, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x10, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60,
+  0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x02, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x01, 0x20, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0xE0,
+  0x10, 0x80, 0x00, 0x00, 0x00, 0x00, 0x0E, 0xFC, 0x01, 0xC0, 0x00, 0x00,
+  0x00, 0x00, 0x0A, 0x49, 0xA7, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x19, 0x40,
+  0xFC, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x19, 0x40, 0x24, 0xA0, 0x00, 0x00,
+  0x00, 0x00, 0x1F, 0xBF, 0xFD, 0x80, 0x00, 0x00, 0x00, 0x00, 0x32, 0x29,
+  0xC7, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x10, 0x2C, 0x00, 0x80, 0x00, 0x00,
+  0x00, 0x00, 0x1C, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x00,
+  0x00, 0x00, 0x00, 0x00,
+};
+
+const Note melody0[] PROGMEM = {
+	{ NOTE_REST, 1500 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 94 },
+	{ NOTE_B3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_A3, 184 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_B3, 94 },
+	{ NOTE_G3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 94 },
+	{ NOTE_B3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_A3, 184 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_B3, 94 },
+	{ NOTE_G3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 94 },
+	{ NOTE_B3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_A3, 184 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_B3, 94 },
+	{ NOTE_G3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 184 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 94 },
+	{ NOTE_B3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_A3, 184 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_B3, 94 },
+	{ NOTE_G3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 184 },
+	{ NOTE_E4, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 373 },
+	{ NOTE_REST, 750 },
+	{ NOTE_REST, 375 },
+	{ NOTE_REST, 187 },
+	{ NOTE_REST, 750 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 374 },
+	{ NOTE_REST, 750 },
+	{ NOTE_REST, 375 },
+	{ NOTE_REST, 187 },
+	{ NOTE_REST, 750 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_C4, 374 },
+	{ NOTE_REST, 750 },
+	{ NOTE_REST, 375 },
+	{ NOTE_REST, 187 },
+	{ NOTE_REST, 750 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 374 },
+	{ NOTE_REST, 750 },
+	{ NOTE_REST, 375 },
+	{ NOTE_REST, 187 },
+	{ NOTE_REST, 750 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 374 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_C4, 372 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 90 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 2903 },
+	{ NOTE_REST, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 90 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_D4, 2903 },
+	{ NOTE_REST, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 90 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_B4, 373 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_C4, 372 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 90 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_C4, 372 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 90 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 2903 },
+	{ NOTE_REST, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 90 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_D4, 2903 },
+	{ NOTE_REST, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 90 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 1591 },
+	{ NOTE_REST, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D6, 937 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G6, 937 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_AS5, 188 },
+	{ NOTE_A5, 94 },
+	{ NOTE_G5, 94 },
+	{ NOTE_E5, 561 },
+	{ NOTE_D5, 94 },
+	{ NOTE_C5, 94 },
+	{ NOTE_B4, 4031 },
+	{ NOTE_B5, 94 },
+	{ NOTE_D6, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_D6, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_D6, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_D6, 94 },
+	{ NOTE_A5, 186 },
+	{ NOTE_G5, 94 },
+	{ NOTE_E5, 92 },
+	{ NOTE_E5, 188 },
+	{ NOTE_D5, 1124 },
+	{ NOTE_E6, 282 },
+	{ NOTE_G6, 94 },
+	{ NOTE_B6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_A6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_B6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_A6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_B6, 94 },
+	{ NOTE_G6, 90 },
+	{ NOTE_A6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_B6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_A6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_B6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_A6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 90 },
+	{ NOTE_B6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_A6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_B6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_A6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_C7, 372 },
+	{ NOTE_C7, 188 },
+	{ NOTE_C7, 375 },
+	{ NOTE_C7, 188 },
+	{ NOTE_C7, 188 },
+	{ NOTE_C7, 375 },
+	{ NOTE_C7, 186 },
+	{ NOTE_C7, 94 },
+	{ NOTE_C7, 94 },
+	{ NOTE_C7, 562 },
+	{ NOTE_B6, 188 },
+	{ NOTE_C7, 94 },
+	{ NOTE_A6, 94 },
+	{ NOTE_B6, 188 },
+	{ NOTE_G6, 94 },
+	{ NOTE_A6, 92 },
+	{ NOTE_FS6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 188 },
+	{ NOTE_E6, 1124 },
+	{ NOTE_REST, 188 },
+	{ NOTE_A5, 188 },
+	{ NOTE_B5, 188 },
+	{ NOTE_E6, 188 },
+	{ NOTE_D6, 375 },
+	{ NOTE_E6, 94 },
+	{ NOTE_D6, 94 },
+	{ NOTE_B5, 185 },
+	{ NOTE_D6, 188 },
+	{ NOTE_B5, 188 },
+	{ NOTE_A5, 94 },
+	{ NOTE_G5, 94 },
+	{ NOTE_E5, 188 },
+	{ NOTE_B4, 562 },
+	{ NOTE_E5, 94 },
+	{ NOTE_G5, 92 },
+	{ NOTE_C6, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_C6, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_C6, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_C6, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_G5, 94 },
+	{ NOTE_E5, 94 },
+	{ NOTE_G5, 94 },
+	{ NOTE_E5, 94 },
+	{ NOTE_G5, 94 },
+	{ NOTE_E5, 94 },
+	{ NOTE_G5, 94 },
+	{ NOTE_E5, 90 },
+	{ NOTE_D5, 938 },
+	{ NOTE_D5, 188 },
+	{ NOTE_CS5, 188 },
+	{ NOTE_C5, 186 },
+	{ NOTE_A4, 188 },
+	{ NOTE_CS5, 188 },
+	{ NOTE_C5, 188 },
+	{ NOTE_A4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_CS4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_A3, 1309 },
+	{ NOTE_A3, 188 },
+	{ NOTE_E5, 94 },
+	{ NOTE_FS5, 93 },
+	{ NOTE_E5, 94 },
+	{ NOTE_FS5, 94 },
+	{ NOTE_E5, 94 },
+	{ NOTE_FS5, 94 },
+	{ NOTE_E5, 188 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_A5, 188 },
+	{ NOTE_E5, 94 },
+	{ NOTE_FS5, 90 },
+	{ NOTE_E5, 188 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_C6, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_C6, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_C6, 94 },
+	{ NOTE_A5, 94 },
+	{ NOTE_D6, 559 },
+	{ NOTE_D6, 188 },
+	{ NOTE_D6, 376 },
+	{ NOTE_D6, 188 },
+	{ NOTE_C6, 188 },
+	{ NOTE_D6, 560 },
+	{ NOTE_REST, 375 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 92 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_G6, 94 },
+	{ NOTE_D6, 188 },
+	{ NOTE_C6, 94 },
+	{ NOTE_B5, 94 },
+	{ NOTE_C6, 188 },
+	{ NOTE_REST, 188 },
+	{ NOTE_REST, 188 },
+	{ NOTE_B5, 184 },
+	{ NOTE_D6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_D6, 94 },
+	{ NOTE_E6, 94 },
+	{ NOTE_D6, 94 },
+	{ NOTE_C6, 657 },
+	{ NOTE_E5, 1123 },
+	{ NOTE_D6, 2626 },
+	{ NOTE_E6, 752 },
+	{ NOTE_E6, 188 },
+	{ NOTE_C7, 560 },
+	{ NOTE_A6, 188 },
+	{ NOTE_G6, 563 },
+	{ NOTE_E6, 188 },
+	{ NOTE_C7, 373 },
+	{ NOTE_C7, 188 },
+	{ NOTE_B6, 188 },
+	{ NOTE_A6, 188 },
+	{ NOTE_G6, 188 },
+	{ NOTE_D6, 936 },
+	{ NOTE_C6, 188 },
+	{ NOTE_C6, 188 },
+	{ NOTE_A5, 936 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_D5, 188 },
+	{ NOTE_E5, 373 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_B5, 188 },
+	{ NOTE_G5, 188 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 62 },
+	{ NOTE_FS5, 62 },
+	{ NOTE_G5, 66 },
+	{ NOTE_G5, 188 },
+	{ NOTE_E5, 188 },
+	{ NOTE_E5, 375 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 373 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_C4, 372 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 90 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_C4, 372 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 90 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 90 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 2903 },
+	{ NOTE_REST, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 90 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_D4, 2903 },
+	{ NOTE_REST, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 90 },
+	{ NOTE_E3, 188 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 94 },
+	{ NOTE_E3, 375 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 373 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 94 },
+	{ NOTE_B3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_A3, 184 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_B3, 94 },
+	{ NOTE_G3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 94 },
+	{ NOTE_B3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_A3, 184 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_B3, 94 },
+	{ NOTE_G3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 94 },
+	{ NOTE_B3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_A3, 184 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_B3, 94 },
+	{ NOTE_G3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 372 },
+	{ NOTE_E4, 188 },
+	{ NOTE_E4, 94 },
+	{ NOTE_D4, 94 },
+	{ NOTE_B3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_D4, 94 },
+	{ NOTE_C4, 94 },
+	{ NOTE_A3, 184 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 188 },
+	{ NOTE_C4, 94 },
+	{ NOTE_B3, 94 },
+	{ NOTE_G3, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_G4, 188 },
+	{ NOTE_D4, 188 },
+	{ NOTE_E4, 559 },
+	{ NOTE_REST, 750 },
+	{ NOTE_REST, 375 },
+	{ NOTE_REST, 1500 },
+};
+const uint16_t NUM_OF_NOTES0 = sizeof(melody0)/sizeof(melody0[0]);
+
+bool playing = false;
+bool waitingToStart = false;
+
+uint16_t noteIndex = 0;
+uint16_t soundingNoteIndex = 0xFFFF;
+uint32_t rawNoteStartMs = 0;
+uint32_t rawNoteEndMs = 0;
+
+uint32_t playbackEpochUs = 0;
+
+uint32_t lastAnimMs = 0;
+uint32_t lastRgbHitUs = 0;
+uint8_t rgbVisualPhase = 255;
+uint16_t currentFrequency = NOTE_REST;
+uint16_t currentRawDuration = 0;
+bool currentWhiteAccent = false;
+bool currentLeftStrong = true;
+
+bool lastUp = false;
+bool lastDown = false;
+uint32_t lastButtonMs = 0;
+
+uint32_t rawOffsetToUs(uint32_t rawOffsetMs) {
+  return (uint32_t)((uint64_t)rawOffsetMs * (uint64_t)TIME_SCALE_PERMILLE);
+}
+
+uint32_t playbackElapsedUs(uint32_t nowUs) {
+  return (uint32_t)(nowUs - playbackEpochUs);
+}
+
+uint32_t currentRawSongMs(uint32_t nowUs) {
+  uint32_t elapsedUs = playbackElapsedUs(nowUs);
+  return MIDI_PREROLL_MS + (elapsedUs / TIME_SCALE_PERMILLE);
+}
+
+uint16_t audibleFrequency(uint16_t f) {
+  if (f == NOTE_REST) return NOTE_REST;
+  if (BUZZER_AUDIBILITY_BOOST && f < AUDIBILITY_BOOST_BELOW_HZ) {
+    uint32_t boosted = (uint32_t)f * 2UL;
+    return (boosted <= 65535UL) ? (uint16_t)boosted : f;
+  }
+  return f;
+}
+
+uint16_t locateNoteAtRawMs(uint32_t rawTargetMs, uint32_t &startMs, uint32_t &endMs) {
+  uint32_t accumulated = 0;
+
+  for (uint16_t i = 0; i < NUM_OF_NOTES0; i++) {
+    uint32_t d = melody0[i].duration;
+    uint32_t next = accumulated + d;
+
+    if (rawTargetMs < next) {
+      startMs = accumulated;
+      endMs = next;
+      return i;
+    }
+
+    accumulated = next;
+  }
+
+  startMs = accumulated;
+  endMs = accumulated;
+  return NUM_OF_NOTES0;
+}
+
+void advanceIndexToRawTime(uint32_t rawNowMs) {
+  while (noteIndex < NUM_OF_NOTES0 && rawNowMs >= rawNoteEndMs) {
+    noteIndex++;
+    rawNoteStartMs = rawNoteEndMs;
+
+    if (noteIndex >= NUM_OF_NOTES0) {
+      rawNoteEndMs = rawNoteStartMs;
+      return;
+    }
+
+    rawNoteEndMs = rawNoteStartMs + melody0[noteIndex].duration;
+  }
+}
+
+uint32_t timeToNextNoteUs(uint32_t nowUs) {
+  if (!playing || waitingToStart || noteIndex >= NUM_OF_NOTES0) return 0xFFFFFFFFUL;
+
+  uint32_t noteEndOffsetRawMs = rawNoteEndMs - MIDI_PREROLL_MS;
+  uint32_t targetEndUs = playbackEpochUs + rawOffsetToUs(noteEndOffsetRawMs);
+
+  if ((int32_t)(targetEndUs - nowUs) <= 0) return 0;
+  return targetEndUs - nowUs;
+}
+
+void rgbOff() {
+  MiniR4.LED.setColor(1, 0, 0, 0);
+  MiniR4.LED.setColor(2, 0, 0, 0);
+}
+
+void triggerRhythmLights(uint16_t frequency, uint16_t index, uint16_t duration) {
+
+  currentWhiteAccent =
+      (frequency >= NOTE_G5) ||
+      (duration >= 350) ||
+      ((index % 4U) == 0U);
+
+  currentLeftStrong = ((index & 1U) == 0U);
+  lastRgbHitUs = micros();
+  rgbVisualPhase = 255;
+}
+
+void updateRhythmLights() {
+  if (!playing || waitingToStart || currentFrequency == NOTE_REST) {
+    if (rgbVisualPhase != 3) {
+      rgbOff();
+      rgbVisualPhase = 3;
+    }
+    return;
+  }
+
+  uint32_t ageUs = micros() - lastRgbHitUs;
+  uint8_t phase;
+  if (ageUs < RGB_HIT_US) phase = 0;
+  else if (ageUs < RGB_AFTERGLOW_US) phase = 1;
+  else phase = 2;
+
+  if (phase == rgbVisualPhase) return;
+  rgbVisualPhase = phase;
+
+  if (phase == 0) {
+
+    if (currentWhiteAccent) {
+      if (currentLeftStrong) {
+        MiniR4.LED.setColor(1, 255, 255, 255);
+        MiniR4.LED.setColor(2, 255, 0, 0);
+      } else {
+        MiniR4.LED.setColor(1, 255, 0, 0);
+        MiniR4.LED.setColor(2, 255, 255, 255);
+      }
+    } else {
+      MiniR4.LED.setColor(1, 255, 0, 0);
+      MiniR4.LED.setColor(2, 255, 0, 0);
+    }
+  }
+  else if (phase == 1) {
+
+    if (currentLeftStrong) {
+      MiniR4.LED.setColor(1, 255, 0, 0);
+      MiniR4.LED.setColor(2, 105, 105, 105);
+    } else {
+      MiniR4.LED.setColor(1, 105, 105, 105);
+      MiniR4.LED.setColor(2, 255, 0, 0);
+    }
+  }
+  else {
+
+    MiniR4.LED.setColor(1, 50, 0, 0);
+    MiniR4.LED.setColor(2, 50, 0, 0);
+  }
+}
+
+uint8_t oledEnergyLevel() {
+  if (currentFrequency == NOTE_REST) return 0;
+  uint32_t f = currentFrequency;
+  if (f < 260) return 1;
+  if (f < 350) return 2;
+  if (f < 450) return 3;
+  if (f < 600) return 4;
+  if (f < 800) return 5;
+  if (f < 1100) return 6;
+  if (f < 1500) return 7;
+  return 8;
+}
+
+void drawSideMeter(uint8_t energy, uint8_t phase) {
+  if (energy == 0) return;
+
+  for (uint8_t i = 0; i < 4; i++) {
+    uint8_t threshold = 2 + i * 2;
+    if (energy >= threshold) {
+      uint8_t y = 27 - i * 5;
+      uint8_t len = 3 + ((phase + i) & 0x03);
+      MiniR4.OLED.drawLine(1, y, 1 + len, y, SSD1306_WHITE);
+      MiniR4.OLED.drawLine(126 - len, y, 126, y, SSD1306_WHITE);
+    }
+  }
+}
+
+void drawBeatBurst(bool strong, uint8_t phase) {
+  if (!strong) return;
+
+  uint8_t d = 3 + (phase & 0x03);
+  MiniR4.OLED.drawLine(0, 2, 8 + d, 8, SSD1306_WHITE);
+  MiniR4.OLED.drawLine(0, 29, 8 + d, 23, SSD1306_WHITE);
+  MiniR4.OLED.drawLine(127, 2, 119 - d, 8, SSD1306_WHITE);
+  MiniR4.OLED.drawLine(127, 29, 119 - d, 23, SSD1306_WHITE);
+
+  if (currentWhiteAccent) {
+    MiniR4.OLED.drawRect(0, 0, 128, 32, SSD1306_WHITE);
+  }
+}
+
+void drawTransitionFrame(uint32_t sceneMs, bool toLogo, uint8_t phase) {
+  MiniR4.OLED.clearDisplay();
+
+  if (sceneMs < 120) {
+    MiniR4.OLED.fillScreen(SSD1306_WHITE);
+    uint8_t cut = (phase * 5U) % 31U;
+    MiniR4.OLED.drawLine(0, cut, 127, cut, SSD1306_BLACK);
+    MiniR4.OLED.drawLine(0, (cut + 11U) % 31U, 127, (cut + 11U) % 31U, SSD1306_BLACK);
+  }
+  else if (sceneMs < 240) {
+    uint8_t reach = (uint8_t)((sceneMs - 120UL) * 64UL / 120UL);
+    if (reach > 64) reach = 64;
+    MiniR4.OLED.drawLine(63, 0, 63 - reach, 15, SSD1306_WHITE);
+    MiniR4.OLED.drawLine(64, 0, 64 + reach, 15, SSD1306_WHITE);
+    MiniR4.OLED.drawLine(63, 31, 63 - reach, 16, SSD1306_WHITE);
+    MiniR4.OLED.drawLine(64, 31, 64 + reach, 16, SSD1306_WHITE);
+    MiniR4.OLED.drawLine(0, 15, 127, 15, SSD1306_WHITE);
+    MiniR4.OLED.drawLine(0, 16, 127, 16, SSD1306_WHITE);
+  }
+  else {
+    uint8_t bars = (uint8_t)((sceneMs - 240UL) / 30UL);
+    if (bars > 6) bars = 6;
+    for (uint8_t i = 0; i < bars; i++) {
+      uint8_t y = i * 5;
+      if (toLogo) {
+        MiniR4.OLED.drawLine(0, y, 20 + i * 14, y, SSD1306_WHITE);
+      } else {
+        MiniR4.OLED.drawLine(127, y, 107 - i * 14, y, SSD1306_WHITE);
+      }
+    }
+  }
+
+  MiniR4.OLED.display();
+}
+
+void drawLogoScene(uint32_t sceneMs, uint8_t phase, bool beatFlash) {
+  MiniR4.OLED.clearDisplay();
+
+  int16_t x = 0;
+
+  if (sceneMs < 900) {
+    uint32_t t = sceneMs;
+    if (t > 900) t = 900;
+    x = -72 + (int16_t)((t * 72UL) / 900UL);
+  }
+  else if (sceneMs > 4320) {
+    uint32_t t = sceneMs - 4320UL;
+    if (t > 680) t = 680;
+    x = (int16_t)((t * 72UL) / 680UL);
+  }
+
+  if (beatFlash && sceneMs > 900 && sceneMs < 4320) {
+    x += currentLeftStrong ? -1 : 1;
+  }
+
+  MiniR4.OLED.drawBitmap(x, 0, ironMaidenLogo, 128, 32, SSD1306_WHITE);
+
+  uint8_t scanY = (uint8_t)((sceneMs / 74UL) % 38UL);
+  if (scanY < 32) {
+    MiniR4.OLED.drawLine(0, scanY, 127, scanY, SSD1306_BLACK);
+    if ((phase & 0x03) == 0 && scanY < 31) {
+      MiniR4.OLED.drawLine(0, scanY + 1, 127, scanY + 1, SSD1306_WHITE);
+    }
+  }
+
+  if ((phase % 11U) == 7U && sceneMs > 1000 && sceneMs < 4200) {
+    uint8_t gy = 4 + ((phase * 7U) % 20U);
+    uint8_t gw = 20 + ((phase * 9U) % 45U);
+    uint8_t gx = (phase * 13U) % (128U - gw);
+    MiniR4.OLED.fillRect(gx, gy, gw, 2, SSD1306_BLACK);
+    MiniR4.OLED.drawLine(gx + 3, gy, gx + gw - 1, gy, SSD1306_WHITE);
+  }
+
+  uint8_t sweep = (uint8_t)((sceneMs * 128UL) / OLED_SWAP_MS);
+  if (sweep > 127) sweep = 127;
+  MiniR4.OLED.drawLine(0, 31, sweep, 31, SSD1306_WHITE);
+
+  drawSideMeter(oledEnergyLevel(), phase);
+  drawBeatBurst(beatFlash, phase);
+
+  MiniR4.OLED.display();
+}
+
+void drawEddieScene(uint32_t sceneMs, uint8_t phase, bool beatFlash) {
+  MiniR4.OLED.clearDisplay();
+
+  int16_t baseX = 32;
+
+  if (sceneMs < 850) {
+    uint32_t t = sceneMs;
+    if (t > 850) t = 850;
+    baseX = 95 - (int16_t)((t * 63UL) / 850UL);
+  }
+  else if (sceneMs > 4350) {
+    uint32_t t = sceneMs - 4350UL;
+    if (t > 650) t = 650;
+    baseX = 32 - (int16_t)((t * 70UL) / 650UL);
+  }
+
+  int8_t bobX = 0;
+  int8_t bobY = 0;
+
+  switch (phase & 0x07) {
+    case 1: bobX = 1; break;
+    case 2: bobX = 1; bobY = 1; break;
+    case 3: bobY = 1; break;
+    case 5: bobX = -1; break;
+    case 6: bobX = -1; bobY = 1; break;
+    case 7: bobY = 1; break;
+    default: break;
+  }
+
+  if (beatFlash) {
+    bobX += currentLeftStrong ? -1 : 1;
+    if (currentWhiteAccent) bobX += currentLeftStrong ? -1 : 1;
+  }
+
+  int16_t bx = baseX + bobX;
+  int16_t by = bobY;
+
+  if (beatFlash && currentWhiteAccent) {
+    MiniR4.OLED.drawBitmap(bx - 1, by, eddieRefBitmap, 64, 32, SSD1306_WHITE);
+    MiniR4.OLED.drawBitmap(bx + 1, by, eddieRefBitmap, 64, 32, SSD1306_WHITE);
+  }
+
+  MiniR4.OLED.drawBitmap(bx, by, eddieRefBitmap, 64, 32, SSD1306_WHITE);
+
+  uint8_t eyeCycle = phase % 24U;
+  bool blink = (eyeCycle == 18U || eyeCycle == 19U);
+  int8_t eyeDx;
+
+  if (eyeCycle < 5U) eyeDx = -2;
+  else if (eyeCycle < 9U) eyeDx = -1;
+  else if (eyeCycle < 14U) eyeDx = 0;
+  else if (eyeCycle < 18U) eyeDx = 1;
+  else if (eyeCycle < 22U) eyeDx = 2;
+  else eyeDx = 0;
+
+  if (!blink) {
+    uint8_t eyeW = currentWhiteAccent ? 3 : 2;
+    MiniR4.OLED.fillRect(bx + 18 + eyeDx, by + 11, eyeW, 2, SSD1306_WHITE);
+    MiniR4.OLED.fillRect(bx + 44 + eyeDx, by + 11, eyeW, 2, SSD1306_WHITE);
+
+    if (beatFlash && currentFrequency >= NOTE_G5) {
+      MiniR4.OLED.drawPixel(bx + 17 + eyeDx, by + 10, SSD1306_WHITE);
+      MiniR4.OLED.drawPixel(bx + 47 + eyeDx, by + 10, SSD1306_WHITE);
+    }
+  } else {
+    MiniR4.OLED.drawLine(bx + 16, by + 12, bx + 22, by + 12, SSD1306_WHITE);
+    MiniR4.OLED.drawLine(bx + 42, by + 12, bx + 48, by + 12, SSD1306_WHITE);
+  }
+
+  uint8_t jaw = (phase / 2U) & 0x03U;
+  if (jaw == 1U || jaw == 2U) {
+    MiniR4.OLED.drawLine(bx + 22, by + 27, bx + 42, by + 27, SSD1306_BLACK);
+    MiniR4.OLED.drawLine(bx + 24, by + 28, bx + 40, by + 28, SSD1306_WHITE);
+    MiniR4.OLED.drawPixel(bx + 28, by + 29, SSD1306_WHITE);
+    MiniR4.OLED.drawPixel(bx + 34, by + 29, SSD1306_WHITE);
+    MiniR4.OLED.drawPixel(bx + 39, by + 29, SSD1306_WHITE);
+  }
+
+  uint8_t speedStep = phase & 0x07U;
+  for (uint8_t i = 0; i < 3; i++) {
+    uint8_t y = 6 + i * 8 + ((speedStep + i) & 1U);
+    uint8_t len = 4 + ((phase + i * 3U) & 0x07U);
+    MiniR4.OLED.drawLine(2, y, 2 + len, y, SSD1306_WHITE);
+    MiniR4.OLED.drawLine(125 - len, y + 2, 125, y + 2, SSD1306_WHITE);
+  }
+
+  if ((phase % 13U) == 9U && sceneMs > 900 && sceneMs < 4200) {
+    uint8_t gy = 8 + ((phase * 5U) % 15U);
+    MiniR4.OLED.drawLine(bx - 5, gy, bx + 68, gy, SSD1306_BLACK);
+    MiniR4.OLED.drawLine(bx - 2, gy + 1, bx + 64, gy + 1, SSD1306_WHITE);
+  }
+
+  drawSideMeter(oledEnergyLevel(), phase);
+  drawBeatBurst(beatFlash, phase);
+
+  MiniR4.OLED.display();
+}
+
+void showLogoFull() {
+  MiniR4.OLED.clearDisplay();
+  MiniR4.OLED.drawBitmap(0, 0, ironMaidenLogo, 128, 32, SSD1306_WHITE);
+  MiniR4.OLED.display();
+}
+
+void showReadyScreen() {
+  showLogoFull();
+}
+
+void updateAnimation() {
+  if (!playing && !waitingToStart) return;
+
+  uint32_t nowMs = millis();
+  if ((uint32_t)(nowMs - lastAnimMs) < OLED_FRAME_MS) return;
+
+  uint32_t nowUs = micros();
+  if (!waitingToStart && timeToNextNoteUs(nowUs) < OLED_GUARD_US) return;
+
+  lastAnimMs = nowMs;
+
+  uint32_t elapsedMs = waitingToStart ? 0 : playbackElapsedUs(nowUs) / 1000UL;
+  uint32_t sceneMs = elapsedMs % OLED_SWAP_MS;
+  uint32_t sceneIndex = elapsedMs / OLED_SWAP_MS;
+  bool logoScene = (sceneIndex & 1U) == 0U;
+  uint8_t phase = (uint8_t)(elapsedMs / OLED_BOB_MS);
+  bool beatFlash = !waitingToStart && ((micros() - lastRgbHitUs) < 65000UL);
+
+  if (sceneMs < OLED_TRANSITION_MS && elapsedMs >= OLED_SWAP_MS) {
+    drawTransitionFrame(sceneMs, logoScene, phase);
+    return;
+  }
+
+  if (logoScene) {
+    drawLogoScene(sceneMs, phase, beatFlash);
+  } else {
+    drawEddieScene(sceneMs, phase, beatFlash);
+  }
+}
+
+void stopPlayback(bool showReady = true) {
+  playing = false;
+  waitingToStart = false;
+  soundingNoteIndex = 0xFFFF;
+  currentFrequency = NOTE_REST;
+
+  MiniR4.Buzzer.NoTone();
+  rgbOff();
+
+  if (showReady) showReadyScreen();
+}
+
+void startCurrentTimedNote(uint32_t nowUs) {
+  if (noteIndex >= NUM_OF_NOTES0) {
+    stopPlayback(true);
+    return;
+  }
+
+  uint16_t frequency = melody0[noteIndex].frequency;
+  uint16_t rawDuration = melody0[noteIndex].duration;
+
+  uint32_t noteEndOffsetRawMs = rawNoteEndMs - MIDI_PREROLL_MS;
+  uint32_t targetEndUs = playbackEpochUs + rawOffsetToUs(noteEndOffsetRawMs);
+
+  if ((int32_t)(targetEndUs - nowUs) <= 0) return;
+
+  uint32_t remainingUs = targetEndUs - nowUs;
+  uint32_t remainingMs = (remainingUs + 999UL) / 1000UL;
+  if (remainingMs == 0) remainingMs = 1;
+
+  MiniR4.Buzzer.NoTone();
+  currentFrequency = frequency;
+  currentRawDuration = rawDuration;
+  soundingNoteIndex = noteIndex;
+
+  if (frequency == NOTE_REST) {
+    rgbOff();
+    rgbVisualPhase = 3;
+    return;
+  }
+
+  uint16_t outFreq = audibleFrequency(frequency);
+  MiniR4.Buzzer.Tone(outFreq, remainingMs);
+  triggerRhythmLights(frequency, noteIndex, rawDuration);
+}
+
+void startPlayback() {
+  MiniR4.Buzzer.NoTone();
+  rgbOff();
+
+  uint32_t startRaw = MIDI_PREROLL_MS;
+  noteIndex = locateNoteAtRawMs(startRaw, rawNoteStartMs, rawNoteEndMs);
+
+  if (noteIndex >= NUM_OF_NOTES0) {
+    stopPlayback(true);
+    return;
+  }
+
+  uint32_t nowUs = micros();
+  playbackEpochUs = nowUs + ((uint32_t)START_DELAY_MS * 1000UL);
+
+  soundingNoteIndex = 0xFFFF;
+  currentFrequency = NOTE_REST;
+  lastAnimMs = millis();
+  showLogoFull();
+
+  playing = true;
+  waitingToStart = (START_DELAY_MS > 0);
+
+  if (!waitingToStart) {
+    startCurrentTimedNote(micros());
+  }
+}
+
+void updatePlayback() {
+  if (!playing) return;
+
+  uint32_t nowUs = micros();
+
+  if (waitingToStart) {
+    if ((int32_t)(nowUs - playbackEpochUs) >= 0) {
+      waitingToStart = false;
+      soundingNoteIndex = 0xFFFF;
+      startCurrentTimedNote(nowUs);
+    }
+    return;
+  }
+
+  uint32_t rawNowMs = currentRawSongMs(nowUs);
+
+  advanceIndexToRawTime(rawNowMs);
+
+  if (noteIndex >= NUM_OF_NOTES0) {
+    stopPlayback(true);
+    return;
+  }
+
+  if (soundingNoteIndex != noteIndex) {
+    startCurrentTimedNote(nowUs);
+  }
+}
+
+void updateButtons() {
+  bool up = MiniR4.BTN_UP.getState();
+  bool down = MiniR4.BTN_DOWN.getState();
+
+  uint32_t now = millis();
+
+  if (up && !lastUp && (uint32_t)(now - lastButtonMs) > 35) {
+    lastButtonMs = now;
+
+    startPlayback();
+  }
+
+  if (down && !lastDown && (uint32_t)(now - lastButtonMs) > 35) {
+    lastButtonMs = now;
+    stopPlayback(true);
+  }
+
+  lastUp = up;
+  lastDown = down;
+}
+
+void setup() {
+  MiniR4.begin();
+
+  MiniR4.LED.setBrightness(1, RGB_BRIGHTNESS);
+  MiniR4.LED.setBrightness(2, RGB_BRIGHTNESS);
+
+  rgbOff();
+  MiniR4.Buzzer.NoTone();
+
+  showReadyScreen();
+}
+
+void loop() {
+
+  updatePlayback();
+  updateRhythmLights();
+  updateButtons();
+  updateAnimation();
+
+}
