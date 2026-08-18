@@ -1,0 +1,1040 @@
+#include <MatrixMiniR4.h>
+#include <Wire.h>
+
+// CONEXIONES
+// I2C1 -> Laser V2 secundario
+// I2C2 -> LCD 16x2
+// I2C3 -> LCD 16x4
+// I2C4 -> Laser V2 principal
+
+#define MUX_ADDR 0x70
+#define LCD_RS 0x01
+#define LCD_EN 0x04
+#define LCD_BACKLIGHT 0x08
+
+const byte CANAL_LCD_16X2 = 1;
+const byte CANAL_LCD_16X4 = 2;
+
+uint8_t addr16x2 = 0;
+uint8_t addr16x4 = 0;
+
+const int DIST_MIN_VALIDA = 21;
+const int DIST_MAX_VALIDA = 1999;
+
+const int LIMITE_VERDE = 150;
+const int INICIO_ROJO = 300;
+
+bool laser1Iniciado = false;
+bool laser1Lectura = false;
+int distanciaLaser1 = 0;
+
+bool laser2Iniciado = false;
+bool laser2Lectura = false;
+int distanciaLaser2 = 0;
+
+const byte NUM_MUESTRAS = 5;
+
+int muestras[NUM_MUESTRAS];
+
+byte indiceMuestra = 0;
+byte muestrasGuardadas = 0;
+
+int distanciaFiltrada = 0;
+
+byte fallosLaser1 = 0;
+const byte MAX_FALLOS = 3;
+
+unsigned long ultimoSensor = 0;
+unsigned long ultimaLCD = 0;
+unsigned long ultimoOLED = 0;
+unsigned long ultimoReintentoLaser = 0;
+
+const unsigned long INTERVALO_SENSOR = 60;
+const unsigned long INTERVALO_LCD = 250;
+const unsigned long INTERVALO_OLED = 350;
+const unsigned long REINTENTO_LASER = 2000;
+
+enum NivelDistancia {
+  SIN_DATO,
+  CERCA,
+  MEDIO,
+  LEJOS
+};
+
+NivelDistancia nivelActual = SIN_DATO;
+
+
+// I2C
+
+void seleccionarCanal(byte canal) {
+  Wire1.beginTransmission(MUX_ADDR);
+  Wire1.write(1 << canal);
+  Wire1.endTransmission();
+  delayMicroseconds(200);
+}
+
+bool existeI2C(byte canal, uint8_t direccion) {
+  seleccionarCanal(canal);
+
+  Wire1.beginTransmission(direccion);
+
+  return Wire1.endTransmission() == 0;
+}
+
+uint8_t buscarLCD(byte canal) {
+
+  if (existeI2C(canal, 0x27))
+    return 0x27;
+
+  if (existeI2C(canal, 0x3F))
+    return 0x3F;
+
+  for (uint8_t d = 0x20; d <= 0x27; d++) {
+    if (existeI2C(canal, d))
+      return d;
+  }
+
+  for (uint8_t d = 0x38; d <= 0x3F; d++) {
+
+    if (d == 0x3D)
+      continue;
+
+    if (existeI2C(canal, d))
+      return d;
+  }
+
+  return 0;
+}
+
+
+// LCD
+
+void lcdExpanderWrite(
+  byte canal,
+  uint8_t direccion,
+  uint8_t dato
+) {
+  seleccionarCanal(canal);
+
+  Wire1.beginTransmission(direccion);
+  Wire1.write(dato | LCD_BACKLIGHT);
+  Wire1.endTransmission();
+}
+
+void lcdPulseEnable(
+  byte canal,
+  uint8_t direccion,
+  uint8_t dato
+) {
+  lcdExpanderWrite(
+    canal,
+    direccion,
+    dato | LCD_EN
+  );
+
+  delayMicroseconds(1);
+
+  lcdExpanderWrite(
+    canal,
+    direccion,
+    dato & ~LCD_EN
+  );
+
+  delayMicroseconds(50);
+}
+
+void lcdWrite4Bits(
+  byte canal,
+  uint8_t direccion,
+  uint8_t dato
+) {
+  lcdExpanderWrite(
+    canal,
+    direccion,
+    dato
+  );
+
+  lcdPulseEnable(
+    canal,
+    direccion,
+    dato
+  );
+}
+
+void lcdSend(
+  byte canal,
+  uint8_t direccion,
+  uint8_t valor,
+  uint8_t modo
+) {
+  uint8_t alto = valor & 0xF0;
+  uint8_t bajo = (valor << 4) & 0xF0;
+
+  lcdWrite4Bits(
+    canal,
+    direccion,
+    alto | modo
+  );
+
+  lcdWrite4Bits(
+    canal,
+    direccion,
+    bajo | modo
+  );
+}
+
+void lcdCommand(
+  byte canal,
+  uint8_t direccion,
+  uint8_t comando
+) {
+  lcdSend(
+    canal,
+    direccion,
+    comando,
+    0
+  );
+}
+
+void lcdWrite(
+  byte canal,
+  uint8_t direccion,
+  char caracter
+) {
+  lcdSend(
+    canal,
+    direccion,
+    caracter,
+    LCD_RS
+  );
+}
+
+void lcdBegin(
+  byte canal,
+  uint8_t direccion
+) {
+  delay(50);
+
+  lcdExpanderWrite(
+    canal,
+    direccion,
+    0
+  );
+
+  delay(100);
+
+  lcdWrite4Bits(
+    canal,
+    direccion,
+    0x30
+  );
+
+  delayMicroseconds(4500);
+
+  lcdWrite4Bits(
+    canal,
+    direccion,
+    0x30
+  );
+
+  delayMicroseconds(4500);
+
+  lcdWrite4Bits(
+    canal,
+    direccion,
+    0x30
+  );
+
+  delayMicroseconds(150);
+
+  lcdWrite4Bits(
+    canal,
+    direccion,
+    0x20
+  );
+
+  lcdCommand(
+    canal,
+    direccion,
+    0x28
+  );
+
+  lcdCommand(
+    canal,
+    direccion,
+    0x08
+  );
+
+  lcdCommand(
+    canal,
+    direccion,
+    0x01
+  );
+
+  delay(2);
+
+  lcdCommand(
+    canal,
+    direccion,
+    0x06
+  );
+
+  lcdCommand(
+    canal,
+    direccion,
+    0x0C
+  );
+}
+
+void lcdSetCursor(
+  byte canal,
+  uint8_t direccion,
+  byte columna,
+  byte fila
+) {
+  const uint8_t offsets[4] = {
+    0x00,
+    0x40,
+    0x10,
+    0x50
+  };
+
+  lcdCommand(
+    canal,
+    direccion,
+    0x80 | (columna + offsets[fila])
+  );
+}
+
+void lcdPrint(
+  byte canal,
+  uint8_t direccion,
+  String texto
+) {
+  for (unsigned int i = 0; i < texto.length(); i++) {
+    lcdWrite(
+      canal,
+      direccion,
+      texto[i]
+    );
+  }
+}
+
+void escribirFila(
+  byte canal,
+  uint8_t direccion,
+  byte fila,
+  String texto
+) {
+  if (direccion == 0)
+    return;
+
+  if (texto.length() > 16)
+    texto = texto.substring(0, 16);
+
+  while (texto.length() < 16)
+    texto += " ";
+
+  lcdSetCursor(
+    canal,
+    direccion,
+    0,
+    fila
+  );
+
+  lcdPrint(
+    canal,
+    direccion,
+    texto
+  );
+}
+
+String lineaDerecha(
+  String titulo,
+  String valor
+) {
+  String linea = titulo;
+
+  while (
+    linea.length() +
+    valor.length() <
+    16
+  ) {
+    linea += " ";
+  }
+
+  linea += valor;
+
+  if (linea.length() > 16)
+    linea = linea.substring(0, 16);
+
+  return linea;
+}
+
+
+// OLED
+
+void animacionInicioOLED() {
+
+  const byte pasos = 10;
+
+  for (
+    byte progreso = 0;
+    progreso <= pasos;
+    progreso++
+  ) {
+
+    MiniR4.OLED.clearDisplay();
+    MiniR4.OLED.setTextSize(1);
+
+    MiniR4.OLED.setCursor(22, 4);
+    MiniR4.OLED.println("ATOM ARCHBOT");
+
+    MiniR4.OLED.setCursor(25, 24);
+    MiniR4.OLED.println("INICIANDO");
+
+    MiniR4.OLED.setCursor(20, 43);
+    MiniR4.OLED.print("[");
+
+    for (
+      byte i = 0;
+      i < pasos;
+      i++
+    ) {
+
+      if (i < progreso)
+        MiniR4.OLED.print("#");
+
+      else
+        MiniR4.OLED.print(".");
+    }
+
+    MiniR4.OLED.print("]");
+    MiniR4.OLED.display();
+
+    delay(80);
+  }
+}
+
+String textoNivel() {
+
+  switch (nivelActual) {
+
+    case CERCA:
+      return "CERCA";
+
+    case MEDIO:
+      return "MEDIO";
+
+    case LEJOS:
+      return "LEJOS";
+
+    default:
+      return "---";
+  }
+}
+
+String textoRango() {
+
+  switch (nivelActual) {
+
+    case CERCA:
+      return "21-150mm";
+
+    case MEDIO:
+      return "151-299mm";
+
+    case LEJOS:
+      return ">=300mm";
+
+    default:
+      return "---";
+  }
+}
+
+void actualizarOLED() {
+
+  MiniR4.OLED.clearDisplay();
+  MiniR4.OLED.setTextSize(1);
+
+  MiniR4.OLED.setCursor(22, 0);
+  MiniR4.OLED.println("ATOM ARCHBOT");
+
+  MiniR4.OLED.setCursor(0, 15);
+  MiniR4.OLED.print("L1:");
+
+  if (
+    laser1Iniciado &&
+    laser1Lectura
+  ) {
+    MiniR4.OLED.print(distanciaFiltrada);
+    MiniR4.OLED.print("mm ");
+    MiniR4.OLED.print(textoNivel());
+  }
+
+  else if (laser1Iniciado) {
+    MiniR4.OLED.print("--- SIN DATO");
+  }
+
+  else {
+    MiniR4.OLED.print("--- ERROR");
+  }
+
+  MiniR4.OLED.setCursor(0, 27);
+  MiniR4.OLED.print("L2:");
+
+  if (
+    laser2Iniciado &&
+    laser2Lectura
+  ) {
+    MiniR4.OLED.print(distanciaLaser2);
+    MiniR4.OLED.print("mm");
+  }
+
+  else if (laser2Iniciado) {
+    MiniR4.OLED.print("--- SIN DATO");
+  }
+
+  else {
+    MiniR4.OLED.print("--- RESERVADO");
+  }
+
+  MiniR4.OLED.setCursor(0, 40);
+
+  MiniR4.OLED.print("LCD2:");
+
+  MiniR4.OLED.print(
+    addr16x2 != 0 ?
+    "OK" :
+    "ERR"
+  );
+
+  MiniR4.OLED.print(" LCD3:");
+
+  MiniR4.OLED.print(
+    addr16x4 != 0 ?
+    "OK" :
+    "ERR"
+  );
+
+  MiniR4.OLED.setCursor(0, 53);
+
+  if (laser1Lectura)
+    MiniR4.OLED.print("SISTEMA: ACTIVO");
+
+  else
+    MiniR4.OLED.print("SISTEMA: BUSCANDO");
+
+  MiniR4.OLED.display();
+}
+
+
+// FILTRO
+
+void guardarMuestra(int distancia) {
+
+  muestras[indiceMuestra] = distancia;
+
+  indiceMuestra++;
+
+  if (indiceMuestra >= NUM_MUESTRAS)
+    indiceMuestra = 0;
+
+  if (muestrasGuardadas < NUM_MUESTRAS)
+    muestrasGuardadas++;
+}
+
+int calcularMediana() {
+
+  if (muestrasGuardadas == 0)
+    return 0;
+
+  int copia[NUM_MUESTRAS];
+
+  for (
+    byte i = 0;
+    i < muestrasGuardadas;
+    i++
+  ) {
+    copia[i] = muestras[i];
+  }
+
+  for (
+    byte i = 0;
+    i < muestrasGuardadas - 1;
+    i++
+  ) {
+
+    for (
+      byte j = i + 1;
+      j < muestrasGuardadas;
+      j++
+    ) {
+
+      if (copia[j] < copia[i]) {
+
+        int temporal = copia[i];
+
+        copia[i] = copia[j];
+        copia[j] = temporal;
+      }
+    }
+  }
+
+  return copia[muestrasGuardadas / 2];
+}
+
+void reiniciarFiltro() {
+
+  indiceMuestra = 0;
+  muestrasGuardadas = 0;
+  distanciaFiltrada = 0;
+}
+
+
+// RANGOS
+
+void actualizarNivel(int distancia) {
+
+  if (distancia <= LIMITE_VERDE) {
+    nivelActual = CERCA;
+  }
+
+  else if (distancia < INICIO_ROJO) {
+    nivelActual = MEDIO;
+  }
+
+  else {
+    nivelActual = LEJOS;
+  }
+}
+
+
+// RGB
+
+void ponerRGB(
+  int rojo,
+  int verde,
+  int azul
+) {
+
+  MiniR4.LED.setColor(
+    1,
+    rojo,
+    verde,
+    azul
+  );
+
+  MiniR4.LED.setColor(
+    2,
+    rojo,
+    verde,
+    azul
+  );
+}
+
+void actualizarRGB() {
+
+  if (!laser1Lectura) {
+
+    ponerRGB(
+      0,
+      0,
+      0
+    );
+
+    return;
+  }
+
+  if (nivelActual == CERCA) {
+
+    ponerRGB(
+      0,
+      255,
+      0
+    );
+  }
+
+  else if (nivelActual == MEDIO) {
+
+    ponerRGB(
+      255,
+      180,
+      0
+    );
+  }
+
+  else {
+
+    ponerRGB(
+      255,
+      0,
+      0
+    );
+  }
+}
+
+
+// PANTALLAS LCD
+
+void actualizarLCDs() {
+
+  if (!laser1Lectura) {
+
+    escribirFila(
+      CANAL_LCD_16X4,
+      addr16x4,
+      0,
+      "DIST:        ---"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X4,
+      addr16x4,
+      1,
+      "NIVEL:  SIN DATO"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X4,
+      addr16x4,
+      2,
+      "RANGO:       ---"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X4,
+      addr16x4,
+      3,
+      "LASER: BUSCANDO"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X2,
+      addr16x2,
+      0,
+      "DIST:        ---"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X2,
+      addr16x2,
+      1,
+      "NIVEL:  SIN DATO"
+    );
+
+    return;
+  }
+
+  String distanciaTexto =
+    String(distanciaFiltrada) +
+    "mm";
+
+  escribirFila(
+    CANAL_LCD_16X4,
+    addr16x4,
+    0,
+    lineaDerecha(
+      "DIST:",
+      distanciaTexto
+    )
+  );
+
+  escribirFila(
+    CANAL_LCD_16X4,
+    addr16x4,
+    1,
+    lineaDerecha(
+      "NIVEL:",
+      textoNivel()
+    )
+  );
+
+  escribirFila(
+    CANAL_LCD_16X4,
+    addr16x4,
+    2,
+    lineaDerecha(
+      "RANGO:",
+      textoRango()
+    )
+  );
+
+  escribirFila(
+    CANAL_LCD_16X4,
+    addr16x4,
+    3,
+    lineaDerecha(
+      "LASER:",
+      "OK"
+    )
+  );
+
+  escribirFila(
+    CANAL_LCD_16X2,
+    addr16x2,
+    0,
+    lineaDerecha(
+      "DIST:",
+      distanciaTexto
+    )
+  );
+
+  escribirFila(
+    CANAL_LCD_16X2,
+    addr16x2,
+    1,
+    lineaDerecha(
+      "NIVEL:",
+      textoNivel()
+    )
+  );
+}
+
+
+// LASERS
+
+void iniciarLaser1() {
+
+  laser1Iniciado =
+    MiniR4.I2C4.MXLaserV2.begin();
+
+  if (!laser1Iniciado)
+    laser1Lectura = false;
+}
+
+void iniciarLaser2() {
+
+  laser2Iniciado =
+    MiniR4.I2C1.MXLaserV2.begin();
+
+  if (!laser2Iniciado)
+    laser2Lectura = false;
+}
+
+
+// SETUP
+
+void setup() {
+
+  MiniR4.begin();
+  Serial.begin(115200);
+
+  MiniR4.LED.setBrightness(
+    1,
+    80
+  );
+
+  MiniR4.LED.setBrightness(
+    2,
+    80
+  );
+
+  ponerRGB(
+    0,
+    0,
+    0
+  );
+
+  animacionInicioOLED();
+
+  addr16x2 =
+    buscarLCD(
+      CANAL_LCD_16X2
+    );
+
+  if (addr16x2 != 0) {
+
+    lcdBegin(
+      CANAL_LCD_16X2,
+      addr16x2
+    );
+
+    escribirFila(
+      CANAL_LCD_16X2,
+      addr16x2,
+      0,
+      "ATOM ARCHBOT"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X2,
+      addr16x2,
+      1,
+      "LCD 16x2: OK"
+    );
+  }
+
+  addr16x4 =
+    buscarLCD(
+      CANAL_LCD_16X4
+    );
+
+  if (addr16x4 != 0) {
+
+    lcdBegin(
+      CANAL_LCD_16X4,
+      addr16x4
+    );
+
+    escribirFila(
+      CANAL_LCD_16X4,
+      addr16x4,
+      0,
+      "   ATOM ARCHBOT"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X4,
+      addr16x4,
+      1,
+      "LCD 16x2:    OK"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X4,
+      addr16x4,
+      2,
+      "LCD 16x4:    OK"
+    );
+
+    escribirFila(
+      CANAL_LCD_16X4,
+      addr16x4,
+      3,
+      "LASER:      ..."
+    );
+  }
+
+  iniciarLaser1();
+  iniciarLaser2();
+
+  delay(600);
+
+  actualizarLCDs();
+  actualizarOLED();
+}
+
+
+// LOOP
+
+void loop() {
+
+  unsigned long ahora =
+    millis();
+
+  if (
+    !laser1Iniciado &&
+    ahora -
+    ultimoReintentoLaser >=
+    REINTENTO_LASER
+  ) {
+
+    ultimoReintentoLaser =
+      ahora;
+
+    iniciarLaser1();
+  }
+
+  if (
+    ahora -
+    ultimoSensor >=
+    INTERVALO_SENSOR
+  ) {
+
+    ultimoSensor =
+      ahora;
+
+    if (laser1Iniciado) {
+
+      int lectura =
+        MiniR4.I2C4.MXLaserV2.getDistance();
+
+      if (
+        lectura >= DIST_MIN_VALIDA &&
+        lectura <= DIST_MAX_VALIDA
+      ) {
+
+        fallosLaser1 = 0;
+
+        laser1Lectura = true;
+
+        guardarMuestra(
+          lectura
+        );
+
+        distanciaFiltrada =
+          calcularMediana();
+
+        distanciaLaser1 =
+          distanciaFiltrada;
+
+        actualizarNivel(
+          distanciaFiltrada
+        );
+      }
+
+      else {
+
+        fallosLaser1++;
+
+        if (
+          fallosLaser1 >=
+          MAX_FALLOS
+        ) {
+
+          laser1Lectura = false;
+          nivelActual = SIN_DATO;
+
+          reiniciarFiltro();
+        }
+      }
+    }
+
+    if (laser2Iniciado) {
+
+      int lectura2 =
+        MiniR4.I2C1.MXLaserV2.getDistance();
+
+      if (
+        lectura2 >= DIST_MIN_VALIDA &&
+        lectura2 <= DIST_MAX_VALIDA
+      ) {
+
+        laser2Lectura = true;
+        distanciaLaser2 = lectura2;
+      }
+
+      else {
+
+        laser2Lectura = false;
+      }
+    }
+
+    actualizarRGB();
+  }
+
+  if (
+    ahora -
+    ultimaLCD >=
+    INTERVALO_LCD
+  ) {
+
+    ultimaLCD =
+      ahora;
+
+    actualizarLCDs();
+  }
+
+  if (
+    ahora -
+    ultimoOLED >=
+    INTERVALO_OLED
+  ) {
+
+    ultimoOLED =
+      ahora;
+
+    actualizarOLED();
+  }
+}
