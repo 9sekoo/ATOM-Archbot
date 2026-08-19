@@ -1,0 +1,725 @@
+import sensor
+import time
+import pyb
+import fill_light
+from matrix_mini import send_data
+
+CAMARA_GIRADA = True
+RESOLUCION = sensor.QVGA
+VENTANA_CAMARA = (0, 35, 320, 170)
+BRILLO_LUZ_BLANCA = 35
+
+CONFIANZA_MINIMA = 70
+VENTANA_CONFIANZA = 8
+FRAMES_CONFIRMAR = 8
+FRAMES_PERDIDOS_MAX = 5
+FRAMES_REARMAR = 20
+
+MAX_PORCENTAJE_FRAME_SELLO = 0.42
+SELLO_RELACION_MIN = 0.55
+SELLO_RELACION_MAX = 1.85
+
+INTERVALO_ESTADO_MS = 2000
+DURACION_ESTADO_MS = 150
+INTERVALO_MATRIX_MS = 100
+
+OBJETOS = [
+    {
+        "id": 1,
+        "nombre": "SELLO",
+        "threshold": (0, 81, -38, 123, 16, 38),
+        "color_cuadro": (0, 255, 0),
+        "min_pixels": 650,
+        "min_area": 650,
+        "min_width": 20,
+        "max_width": 180,
+        "min_height": 20,
+        "max_height": 160,
+        "min_density": 0.16,
+        "tipo": "sello"
+    },
+    {
+        "id": 2,
+        "nombre": "PUNTA",
+        "threshold": (42, 63, -15, 19, -84, -36),
+        "color_cuadro": (0, 120, 255),
+        "min_pixels": 35,
+        "min_area": 50,
+        "min_width": 4,
+        "max_width": 260,
+        "min_height": 2,
+        "max_height": 165,
+        "min_density": 0.025,
+        "tipo": "punta"
+    }
+]
+
+usb = pyb.USB_VCP()
+usb.setinterrupt(-1)
+
+led_rojo = pyb.LED(1)
+led_verde = pyb.LED(2)
+led_azul = pyb.LED(3)
+
+def rgb_blanco():
+    led_rojo.on()
+    led_verde.on()
+    led_azul.on()
+
+def rgb_rojo():
+    led_rojo.on()
+    led_verde.off()
+    led_azul.off()
+
+def rgb_verde():
+    led_rojo.off()
+    led_verde.on()
+    led_azul.off()
+
+fill_light.brightness(BRILLO_LUZ_BLANCA)
+fill_light.on()
+
+sensor.reset()
+
+if CAMARA_GIRADA:
+    sensor.set_vflip(True)
+    sensor.set_hmirror(True)
+
+sensor.set_pixformat(sensor.RGB565)
+sensor.set_framesize(RESOLUCION)
+sensor.set_windowing(VENTANA_CAMARA)
+sensor.skip_frames(time=2000)
+
+gain = sensor.get_gain_db()
+rgb_gain = sensor.get_rgb_gain_db()
+exposure = sensor.get_exposure_us()
+
+sensor.set_auto_gain(False, gain_db=gain)
+sensor.set_auto_whitebal(False, rgb_gain_db=rgb_gain)
+sensor.set_auto_exposure(False, exposure_us=exposure)
+
+frames_perdidos = 0
+frames_sin_objeto = 0
+frames_confianza_valida = 0
+
+objeto_confirmado = False
+
+ultimo_config = None
+
+confianza_suavizada = 0
+historial_confianza = []
+
+evento_bloqueado = False
+evento_objeto_id = 0
+
+evento_matrix = 0
+
+ultimo_flash = pyb.millis()
+flash_activo = False
+inicio_flash = 0
+
+ultimo_envio_matrix = pyb.millis()
+ultimo_debug = pyb.millis()
+
+rgb_blanco()
+
+def limitar(valor, minimo, maximo):
+    if valor < minimo:
+        return minimo
+    if valor > maximo:
+        return maximo
+    return valor
+
+def blob_valido(blob, config):
+    ancho = blob.w()
+    alto = blob.h()
+    area = ancho * alto
+
+    if area <= 0:
+        return False
+
+    pixels = blob.pixels()
+    densidad = pixels / area
+
+    if pixels < config["min_pixels"]:
+        return False
+
+    if area < config["min_area"]:
+        return False
+
+    if ancho < config["min_width"]:
+        return False
+
+    if ancho > config["max_width"]:
+        return False
+
+    if alto < config["min_height"]:
+        return False
+
+    if alto > config["max_height"]:
+        return False
+
+    if densidad < config["min_density"]:
+        return False
+
+    return True
+
+def sello_geometria_valida(blob):
+    ancho = blob.w()
+    alto = blob.h()
+
+    if ancho <= 0 or alto <= 0:
+        return False
+
+    relacion = ancho / alto
+
+    if relacion < SELLO_RELACION_MIN:
+        return False
+
+    if relacion > SELLO_RELACION_MAX:
+        return False
+
+    area_blob = ancho * alto
+    area_frame = VENTANA_CAMARA[2] * VENTANA_CAMARA[3]
+    porcentaje = area_blob / area_frame
+
+    if porcentaje > MAX_PORCENTAJE_FRAME_SELLO:
+        return False
+
+    return True
+
+def confianza_forma_sello(blob):
+    ancho = blob.w()
+    alto = blob.h()
+
+    if ancho <= 0 or alto <= 0:
+        return 0
+
+    relacion = ancho / alto
+
+    if 0.80 <= relacion <= 1.30:
+        return 100
+
+    if 0.65 <= relacion <= 1.55:
+        return 90
+
+    if 0.55 <= relacion <= 1.85:
+        return 70
+
+    return 20
+
+def confianza_forma_punta(blob):
+    ancho = blob.w()
+    alto = blob.h()
+
+    if ancho <= 0 or alto <= 0:
+        return 70
+
+    lado_mayor = max(ancho, alto)
+    lado_menor = min(ancho, alto)
+
+    if lado_menor <= 0:
+        return 70
+
+    proporcion = lado_mayor / lado_menor
+
+    if proporcion < 1.20:
+        return 82
+
+    if proporcion < 1.70:
+        return 92
+
+    if proporcion < 3.00:
+        return 100
+
+    if proporcion < 5.00:
+        return 98
+
+    if proporcion < 8.00:
+        return 95
+
+    if proporcion < 12.00:
+        return 92
+
+    if proporcion < 18.00:
+        return 88
+
+    if proporcion < 25.00:
+        return 84
+
+    return 78
+
+def confianza_sello(blob, config):
+    ancho = blob.w()
+    alto = blob.h()
+    area = ancho * alto
+
+    if area <= 0:
+        return 0
+
+    pixels = blob.pixels()
+    densidad = pixels / area
+
+    score_densidad = limitar(densidad * 100, 0, 100)
+
+    score_pixels = limitar(
+        (pixels / (config["min_pixels"] * 3)) * 100,
+        0,
+        100
+    )
+
+    score_area = limitar(
+        (area / (config["min_area"] * 3)) * 100,
+        0,
+        100
+    )
+
+    score_forma = confianza_forma_sello(blob)
+
+    confianza = (
+        score_densidad * 0.48 +
+        score_pixels * 0.22 +
+        score_area * 0.15 +
+        score_forma * 0.15
+    )
+
+    return int(limitar(confianza, 1, 99))
+
+def confianza_punta(blob, config):
+    ancho = blob.w()
+    alto = blob.h()
+    area = ancho * alto
+
+    if area <= 0:
+        return 0
+
+    pixels = blob.pixels()
+    densidad = pixels / area
+
+    score_color = limitar(
+        (densidad / 0.25) * 100,
+        0,
+        100
+    )
+
+    score_pixels = limitar(
+        (pixels / 120) * 100,
+        0,
+        100
+    )
+
+    score_area = limitar(
+        (area / 220) * 100,
+        0,
+        100
+    )
+
+    score_forma = confianza_forma_punta(blob)
+
+    confianza = (
+        score_color * 0.55 +
+        score_pixels * 0.18 +
+        score_area * 0.10 +
+        score_forma * 0.17
+    )
+
+    return int(limitar(confianza, 1, 99))
+
+def calcular_confianza(blob, config):
+    if config["tipo"] == "sello":
+        return confianza_sello(blob, config)
+
+    if config["tipo"] == "punta":
+        return confianza_punta(blob, config)
+
+    return 0
+
+def suavizar_confianza(valor):
+    historial_confianza.append(valor)
+
+    if len(historial_confianza) > VENTANA_CONFIANZA:
+        historial_confianza.pop(0)
+
+    suma = 0
+
+    for valor_guardado in historial_confianza:
+        suma += valor_guardado
+
+    return int(suma / len(historial_confianza))
+
+def detectar_objetos(img):
+    detecciones = []
+
+    for config in OBJETOS:
+
+        if config["id"] == 1:
+            pixels_threshold_actual = 300
+            area_threshold_actual = 300
+            merge_actual = False
+            margin_actual = 0
+
+        else:
+            pixels_threshold_actual = 20
+            area_threshold_actual = 20
+            merge_actual = True
+            margin_actual = 12
+
+        blobs = img.find_blobs(
+            [config["threshold"]],
+            pixels_threshold=pixels_threshold_actual,
+            area_threshold=area_threshold_actual,
+            merge=merge_actual,
+            margin=margin_actual
+        )
+
+        mejor_blob = None
+        mejor_confianza = -1
+
+        for blob in blobs:
+
+            if not blob_valido(blob, config):
+                continue
+
+            if config["id"] == 1:
+                if not sello_geometria_valida(blob):
+                    continue
+
+            confianza = calcular_confianza(
+                blob,
+                config
+            )
+
+            if confianza > mejor_confianza:
+                mejor_confianza = confianza
+                mejor_blob = blob
+
+        if mejor_blob is not None:
+            detecciones.append(
+                (
+                    config,
+                    mejor_blob,
+                    mejor_confianza
+                )
+            )
+
+    if len(detecciones) == 0:
+        return []
+
+    mejor = detecciones[0]
+
+    for deteccion in detecciones:
+        if deteccion[2] > mejor[2]:
+            mejor = deteccion
+
+    return [mejor]
+
+def dibujar_deteccion(
+    img,
+    config,
+    blob,
+    confianza
+):
+    color = config["color_cuadro"]
+
+    img.draw_rectangle(
+        blob.rect(),
+        color=color,
+        thickness=2
+    )
+
+    texto = (
+        config["nombre"] +
+        " " +
+        str(confianza) +
+        "%"
+    )
+
+    ancho_texto = len(texto) * 8 + 6
+    alto_texto = 14
+
+    x = blob.x()
+    y = blob.y() - alto_texto
+
+    if y < 0:
+        y = blob.y()
+
+    img.draw_rectangle(
+        x,
+        y,
+        ancho_texto,
+        alto_texto,
+        color=color,
+        fill=True
+    )
+
+    img.draw_string(
+        x + 3,
+        y + 2,
+        texto,
+        color=(0, 0, 0),
+        scale=1
+    )
+
+def actualizar_rgb(confianza):
+    global ultimo_flash
+    global flash_activo
+    global inicio_flash
+
+    ahora = pyb.millis()
+
+    if (
+        not flash_activo
+        and
+        pyb.elapsed_millis(
+            ultimo_flash
+        ) >= INTERVALO_ESTADO_MS
+    ):
+        flash_activo = True
+        inicio_flash = ahora
+
+        if confianza >= CONFIANZA_MINIMA:
+            rgb_verde()
+        else:
+            rgb_rojo()
+
+    if flash_activo:
+        if (
+            pyb.elapsed_millis(
+                inicio_flash
+            ) >= DURACION_ESTADO_MS
+        ):
+            flash_activo = False
+            ultimo_flash = ahora
+            rgb_blanco()
+
+def enviar_datos_matrix():
+    estado = 1 if objeto_confirmado else 0
+
+    if ultimo_config is not None:
+        objeto_id = ultimo_config["id"]
+    else:
+        objeto_id = 0
+
+    confianza = int(
+        confianza_suavizada
+    )
+
+    send_data([
+        estado,
+        objeto_id,
+        confianza,
+        evento_matrix
+    ])
+
+def enviar_evento(
+    nombre,
+    confianza
+):
+    mensaje = (
+        "DETECTADO:" +
+        nombre +
+        ":" +
+        str(confianza) +
+        "%:EVENTO:" +
+        str(evento_matrix) +
+        "\n"
+    )
+
+    print(mensaje)
+
+    try:
+        usb.write(mensaje)
+    except:
+        pass
+
+def registrar_nuevo_evento(config):
+    global evento_matrix
+    global evento_bloqueado
+    global evento_objeto_id
+
+    if (
+        evento_bloqueado
+        and
+        evento_objeto_id == config["id"]
+    ):
+        return False
+
+    evento_matrix += 1
+
+    if evento_matrix > 65535:
+        evento_matrix = 1
+
+    evento_bloqueado = True
+    evento_objeto_id = config["id"]
+
+    return True
+
+def reiniciar_deteccion():
+    global objeto_confirmado
+    global ultimo_config
+    global confianza_suavizada
+
+    global frames_perdidos
+    global frames_sin_objeto
+    global frames_confianza_valida
+
+    global historial_confianza
+
+    global evento_bloqueado
+    global evento_objeto_id
+
+    objeto_confirmado = False
+
+    ultimo_config = None
+
+    confianza_suavizada = 0
+
+    frames_perdidos = 0
+    frames_sin_objeto = 0
+    frames_confianza_valida = 0
+
+    historial_confianza = []
+
+    evento_bloqueado = False
+    evento_objeto_id = 0
+
+clock = time.clock()
+
+while True:
+
+    clock.tick()
+
+    img = sensor.snapshot()
+
+    detecciones = detectar_objetos(img)
+
+    if len(detecciones) > 0:
+
+        config, blob, confianza_actual = detecciones[0]
+
+        if (
+            ultimo_config is not None
+            and
+            ultimo_config["id"] != config["id"]
+        ):
+            historial_confianza = []
+            frames_confianza_valida = 0
+            objeto_confirmado = False
+
+        ultimo_config = config
+
+        frames_perdidos = 0
+        frames_sin_objeto = 0
+
+        confianza_suavizada = suavizar_confianza(
+            confianza_actual
+        )
+
+        dibujar_deteccion(
+            img,
+            config,
+            blob,
+            confianza_suavizada
+        )
+
+        if (
+            confianza_suavizada
+            >=
+            CONFIANZA_MINIMA
+        ):
+            frames_confianza_valida += 1
+
+        else:
+            if frames_confianza_valida > 0:
+                frames_confianza_valida -= 1
+
+        if (
+            frames_confianza_valida
+            >=
+            FRAMES_CONFIRMAR
+        ):
+            if not objeto_confirmado:
+
+                objeto_confirmado = True
+
+                nuevo_evento = registrar_nuevo_evento(
+                    config
+                )
+
+                if nuevo_evento:
+                    enviar_evento(
+                        config["nombre"],
+                        confianza_suavizada
+                    )
+
+    else:
+
+        frames_perdidos += 1
+
+        if (
+            frames_perdidos
+            >
+            FRAMES_PERDIDOS_MAX
+        ):
+            frames_sin_objeto += 1
+
+            if frames_confianza_valida > 0:
+                frames_confianza_valida -= 1
+
+            if (
+                frames_sin_objeto
+                >=
+                FRAMES_REARMAR
+            ):
+                reiniciar_deteccion()
+
+    actualizar_rgb(
+        confianza_suavizada
+    )
+
+    if (
+        pyb.elapsed_millis(
+            ultimo_envio_matrix
+        )
+        >=
+        INTERVALO_MATRIX_MS
+    ):
+        ultimo_envio_matrix = pyb.millis()
+
+        enviar_datos_matrix()
+
+    if (
+        pyb.elapsed_millis(
+            ultimo_debug
+        )
+        >=
+        1000
+    ):
+        ultimo_debug = pyb.millis()
+
+        if ultimo_config is None:
+            nombre_debug = "NINGUNO"
+            id_debug = 0
+        else:
+            nombre_debug = ultimo_config["nombre"]
+            id_debug = ultimo_config["id"]
+
+        print(
+            "FPS:",
+            int(clock.fps()),
+            "| Objeto:",
+            nombre_debug,
+            "| ID:",
+            id_debug,
+            "| Confianza:",
+            confianza_suavizada,
+            "%",
+            "| Estabilidad:",
+            frames_confianza_valida,
+            "/",
+            FRAMES_CONFIRMAR,
+            "| Confirmado:",
+            objeto_confirmado,
+            "| Evento:",
+            evento_matrix
+        )
