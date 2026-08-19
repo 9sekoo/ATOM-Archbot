@@ -1,0 +1,473 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <Preferences.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <ESPmDNS.h>
+#include <ArduinoJson.h>
+#include <WiFiUdp.h>
+#include "web_page.h"
+
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 2
+#endif
+
+const char* WIFI_SSID = "Familia Chafa";   // <-- CAMBIA AQUI EL NOMBRE DEL WIFI EN EL FUTURO
+const char* WIFI_PASS = "Familia1985";     // <-- CAMBIA AQUI LA CONTRASENA DEL WIFI EN EL FUTURO
+
+const char* ATOM_AP_SSID = "ATOM-ARCHBOT";
+const char* ATOM_AP_PASS = "ATOM2026-Harnero!";
+const char* ARCHBOT_TOKEN = "A7mQ2xP9kL4vR8sT6cN3";
+
+const char* GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
+const char* GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models";
+const char* GROQ_MODEL = "openai/gpt-oss-120b";
+
+constexpr uint8_t LED_PIN = LED_BUILTIN;
+constexpr uint16_t DISCOVERY_PORT = 4210;
+constexpr uint32_t WIFI_TIMEOUT_MS = 20000;
+constexpr uint32_t WIFI_RETRY_MS = 15000;
+constexpr uint32_t GROQ_CHECK_MS = 120000;
+constexpr uint32_t ARCHBOT_TIMEOUT_MS = 10000;
+constexpr uint32_t CHAT_COOLDOWN_MS = 1300;
+constexpr uint32_t EVENT_COOLDOWN_MS = 100;
+constexpr size_t MAX_CHAT_LENGTH = 700;
+constexpr size_t MAX_EVENT_BODY = 500;
+
+WebServer server(80);
+Preferences preferences;
+WiFiUDP discoveryUdp;
+
+String groqKey = "";
+bool groqFuncionando = false;
+bool wifiEstabaConectado = false;
+bool intentoWifiActivo = false;
+bool mdnsActivo = false;
+uint32_t ultimoChequeoGroq = 0;
+uint32_t ultimoIntentoWiFi = 0;
+uint32_t ultimoChat = 0;
+
+bool archbotSeen = false;
+uint32_t archbotLastSeen = 0;
+uint32_t archbotLastEvent = 0;
+uint16_t archbotObjectId = 0;
+uint16_t archbotConfidence = 0;
+String archbotObject = "NINGUNO";
+String archbotState = "DESCONECTADO";
+String archbotIp = "";
+uint32_t ultimoEventoRecibidoMs = 0;
+
+enum EstadoLed { LED_ARRANCANDO, LED_SIN_INTERNET, LED_INTERNET_SIN_GROQ, LED_TODO_OK };
+EstadoLed estadoLed = LED_ARRANCANDO;
+bool ledEncendido = false;
+uint32_t ultimoCambioLed = 0;
+
+const char SYSTEM_PROMPT[] PROGMEM = R"PROMPT(
+Eres ATOM.ia, el asistente digital oficial del proyecto ATOM-ArchBot y del equipo Los Harneritos.
+
+IDENTIDAD Y CONVERSACION
+- Conversa en español latinoamericano natural, amable y claro.
+- Si alguien saluda, devuelve un saludo agradable y humano. No empieces explicando tus reglas ni diciendo que hablas en lenguaje fácil o técnico.
+- Mantén el hilo de la conversación. Si el usuario dice "otro", "y eso", "por qué", "cuéntame más", "el anterior" o algo parecido, usa el contexto de los mensajes anteriores para entender a qué se refiere.
+- No repitas información que ya acabas de dar salvo que sea necesario.
+- Por defecto explica con palabras sencillas y ejemplos fáciles de imaginar. Si el usuario utiliza vocabulario técnico o pide más profundidad, responde con mayor detalle técnico.
+- Puedes hablar de temas generales además de ATOM: ciencia, historia, matemáticas, tecnología, programación, cultura, lenguaje, educación y temas cotidianos.
+- Si conoces el nombre de la persona que conversa contigo, úsalo con moderación y naturalidad.
+
+REGLA PRINCIPAL DE HONESTIDAD
+- Nunca inventes datos, personas, premios, entrevistas, leyes, capacidades, cifras, citas, enlaces ni fuentes.
+- Si no sabes algo con suficiente seguridad, dilo claramente.
+- Si una pregunta depende de actualidad y no tienes búsqueda web en tiempo real, advierte que el dato podría haber cambiado y evita presentarlo como actual con certeza.
+- Distingue entre hechos del proyecto, ideas previstas, resultados de pruebas y beneficios esperados.
+
+LOS HARNERITOS
+- Los Harneritos es un equipo estudiantil del Liceo Heriberto Soto Soto, de San Fernando, Chile.
+- Integrantes: Benjamín Martínez, Emily Agurto e Ignacio.
+- Coach/tutor del equipo: profesor Felipe González. Si preguntan quién es Felipe González dentro del contexto de ATOM o Los Harneritos, responde que es el profesor y coach/tutor que acompaña al equipo en el desarrollo del proyecto.
+- El trabajo es colaborativo. Benjamín se ha encargado especialmente de diseño mecánico/CAD, fabricación, integración de sensores, visión computacional y muchas pruebas; Emily ha trabajado especialmente en investigación, antecedentes, entrevistas, comunicación y contenidos; Ignacio participa especialmente en programación, electrónica, actuadores e integración funcional. No presentes estas áreas como límites rígidos.
+- El equipo ha investigado el problema, realizado encuestas y conversado con personas relacionadas con arqueología y patrimonio, incluida la arqueóloga Karla Carrasco, además de acercamientos a espacios museales. Eso aporta orientación, pero NO constituye certificación profesional del robot.
+- El 31 de julio de 2026 el equipo obtuvo 2.º lugar regional en WRO/Futuros Innovadores. El proyecto continúa en desarrollo; no inventes resultados posteriores que no estén en este contexto.
+
+QUE ES ATOM-ARCHBOT
+- ATOM-ArchBot es un prototipo orientado a apoyar el harneado arqueológico mediante automatización, sensores y visión computacional.
+- Su objetivo es reducir parte del esfuerzo repetitivo del harneado, apoyar la observación del material, disminuir movimientos innecesarios cuando existe un posible objeto de interés y promover el cuidado del patrimonio.
+- No reemplaza a arqueólogos ni a otros profesionales, no autentica piezas y no garantiza encontrar todos los objetos.
+- Cuando la cámara detecta algo, dilo como "posible hallazgo", "objeto de interés" o "coincidencia visual". La confianza es confianza visual del clasificador, no probabilidad de que algo sea arqueológico.
+
+ARQUITECTURA ACTUAL DEL PROTOTIPO
+- Control principal: MATRIX Mini R4.
+- Visión: M-Vision/OpenMV Cam, comunicada con MATRIX por UART.
+- La cámara envía al MATRIX un paquete conceptual [estado, objeto_id, confianza, evento].
+- Objetos actualmente entrenados/probados: ID 1 SELLO e ID 2 PUNTA. Los IDs 3 a 6 están reservados.
+- La M-Vision realiza la confirmación visual; MATRIX no debe volver a imponer una segunda espera larga antes de aceptar un evento nuevo.
+- MATRIX controla/coordina servomotores del harnero, motores DC de bandeja, botones, final de carrera, pantallas, RGB, buzzer y sensores del sistema según la versión final montada.
+- El sistema contempla dos sensores láser superiores para estimar distancia/cantidad de material y adaptar el movimiento del harnero.
+- Se decidió no usar sensor ultrasónico en la V3 final.
+- La estructura combina acrílico y piezas impresas en 3D.
+
+FLUJO DE CONEXION CON ATOM.IA
+- M-Vision detecta -> MATRIX recibe y decide el evento -> MATRIX se conecta por Wi-Fi a la red privada ATOM-ARCHBOT -> ESP32 recibe heartbeat/eventos -> la interfaz web ATOM.ia los muestra.
+- La ESP32 funciona como servidor de ATOM.ia y además puede conectarse a una red Wi-Fi con Internet para usar Groq.
+- Acceso principal habitual: http://atom-ia.local cuando mDNS está disponible.
+- Acceso de respaldo mediante la red privada ATOM-ARCHBOT: http://192.168.4.1.
+- Si Internet falla, la interfaz local y la comunicación con ATOM-ArchBot pueden seguir funcionando; lo que deja de estar disponible es la IA online de Groq.
+
+FUNCIONAMIENTO PREVISTO DE ATOM-ARCHBOT
+- Al encender, el sistema realiza inicialización y autodiagnóstico antes de habilitar el harneado.
+- Comprueba subsistemas principales como cámara, sensores, posición inicial de servos, pantallas y final de carrera. Si existe un fallo importante, debe informar el error y evitar iniciar normalmente.
+- Los estados previstos incluyen inicialización, listo, harneando, pausa, posible hallazgo, finalización y error.
+- Durante el harneado, los sensores y la visión ayudan a adaptar el comportamiento. Ante un posible hallazgo, los servos vuelven a una posición segura, se avisa con luces/buzzer y se detiene o pausa el movimiento correspondiente para revisión humana.
+- El final de carrera ayuda a confirmar la posición de la bandeja.
+
+EVOLUCION DEL PROYECTO
+- V1: Arduino Uno, dos servos para el harnero, sensor ultrasónico, botones, LCD y alimentación sencilla. Sirvió para demostrar el concepto inicial.
+- V2: ESP32/ESP32-CAM, varios motores DC, más pantallas y electrónica. Permitió experimentar con automatización y visión, pero presentó problemas de consumo, pines, Wi-Fi, tamaño y complejidad.
+- V3/V3.x: rediseño con MATRIX Mini R4 + M-Vision/OpenMV, dos servos de harnero, motores DC de bandeja, final de carrera, sensores láser, pantallas, RGB, buzzer, estructura de acrílico e impresión 3D. Es la línea actual de desarrollo.
+
+VISION COMPUTACIONAL
+- La M-Vision trabaja actualmente con detección visual entrenada/probada para piezas de referencia, usando color, forma, densidad y filtros para reducir falsos positivos.
+- La detección del sello y la punta ha sido probada de forma estable en la cámara. Un umbral de confianza alrededor del 70% se usa como referencia de validación en las pruebas actuales.
+- Una forma 3D puede verse muy distinta según el ángulo, por lo que no debes presentar el porcentaje como certeza absoluta.
+- La cámara se ha trabajado con OpenMV y luz integrada para mejorar consistencia, pero iluminación, fondo y posición real siguen siendo factores importantes.
+
+PROBLEMA Y BENEFICIO SOCIAL
+- El proyecto nace de la preocupación por procesos de harneado arqueológico que pueden ser repetitivos, lentos y físicamente demandantes, especialmente cuando existe presión de tiempo en obras o excavaciones.
+- ATOM-ArchBot busca apoyar, no reemplazar, el trabajo humano: automatizar movimiento repetitivo, ayudar a observar el material y detener acciones cuando aparece algo visualmente relevante.
+- Presenta los beneficios como potenciales/esperados mientras no exista una validación profesional extensa en terreno.
+- También tiene un componente educativo: acercar robótica, IA, arqueología y protección del patrimonio a estudiantes y público general.
+
+FUENTES
+- Para normativa y patrimonio chileno: Biblioteca del Congreso Nacional de Chile y Consejo de Monumentos Nacionales.
+- Para material educativo patrimonial: Museo Chileno de Arte Precolombino y otras instituciones museales pertinentes.
+- Para información de la competencia: World Robot Olympiad Association.
+- Para detalles técnicos, historia, versiones, pruebas, integrantes y decisiones de ATOM-ArchBot: documentación interna de Los Harneritos.
+- No inventes URLs, citas textuales ni bibliografías específicas si no las tienes. Si te piden "fuentes", entrega nombres claros de las fuentes y explica qué tipo de información respalda cada una.
+
+ARQUEOLOGIA RESPONSABLE
+- No determines autenticidad, antigüedad, cultura o procedencia de un objeto solo por una imagen o detección automática.
+- Ante un posible hallazgo real, recomienda conservar el contexto y recurrir a profesionales o autoridades competentes.
+- No des instrucciones para saqueo, excavación clandestina, evasión de normativa o comercio ilícito de patrimonio.
+
+OBJETIVO DE LA RESPUESTA
+- Sé útil, preciso y fácil de entender.
+- Si preguntan por ATOM, responde con la información interna anterior antes de improvisar.
+- Si preguntan algo general, responde normalmente y no fuerces el tema hacia arqueología.
+- Mantén continuidad real entre turnos; una respuesta breve como "otro" debe interpretarse según lo que se estaba conversando.
+)PROMPT";
+
+const char* objectNameFromId(uint16_t id) {
+  switch (id) {
+    case 1: return "SELLO";
+    case 2: return "PUNTA";
+    case 3: return "OBJETO 3";
+    case 4: return "OBJETO 4";
+    case 5: return "OBJETO 5";
+    case 6: return "OBJETO 6";
+    default: return "NINGUNO";
+  }
+}
+
+void ledFisico(bool on) { digitalWrite(LED_PIN, on ? HIGH : LOW); ledEncendido = on; }
+void actualizarLed() {
+  uint32_t ahora = millis();
+  if (estadoLed == LED_TODO_OK) { ledFisico(true); return; }
+  if (estadoLed == LED_ARRANCANDO) {
+    if (ahora - ultimoCambioLed >= 150) { ultimoCambioLed = ahora; ledFisico(!ledEncendido); }
+    return;
+  }
+  if (estadoLed == LED_INTERNET_SIN_GROQ) {
+    if (ahora - ultimoCambioLed >= 700) { ultimoCambioLed = ahora; ledFisico(!ledEncendido); }
+    return;
+  }
+  uint32_t fase = ahora % 1800;
+  ledFisico(fase < 120 || (fase >= 260 && fase < 380));
+}
+
+void cargarGroqKey() {
+  preferences.begin("atomia", true);
+  groqKey = preferences.getString("key", "");
+  preferences.end();
+  Serial.print("API Key Groq: "); Serial.println(groqKey.length() > 10 ? "ENCONTRADA" : "NO ENCONTRADA");
+}
+
+bool comprobarGroq(bool forzarMensaje = false) {
+  bool estadoAnterior = groqFuncionando;
+
+  if (WiFi.status() != WL_CONNECTED || groqKey.length() <= 10) {
+    groqFuncionando = false;
+    estadoLed = WiFi.status() == WL_CONNECTED ? LED_INTERNET_SIN_GROQ : LED_SIN_INTERNET;
+
+    if (forzarMensaje || estadoAnterior != groqFuncionando) {
+      Serial.println(groqKey.length() <= 10 ? "Groq: API Key no configurada" : "Groq: sin Internet");
+    }
+    return false;
+  }
+
+  if (forzarMensaje) Serial.println("Comprobando Groq...");
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient https;
+  if (!https.begin(client, GROQ_MODELS_URL)) {
+    groqFuncionando = false;
+    estadoLed = LED_INTERNET_SIN_GROQ;
+    if (forzarMensaje || estadoAnterior != groqFuncionando) Serial.println("Groq: error iniciando HTTPS");
+    return false;
+  }
+
+  https.setTimeout(10000);
+  https.addHeader("Authorization", "Bearer " + groqKey);
+
+  int code = https.GET();
+  https.end();
+
+  groqFuncionando = (code == 200);
+  estadoLed = groqFuncionando ? LED_TODO_OK : LED_INTERNET_SIN_GROQ;
+
+  if (forzarMensaje || estadoAnterior != groqFuncionando) {
+    if (groqFuncionando) Serial.println("GROQ: FUNCIONANDO · IA ONLINE DISPONIBLE");
+    else { Serial.print("GROQ: NO DISPONIBLE · HTTP "); Serial.println(code); }
+  }
+
+  return groqFuncionando;
+}
+
+bool archbotOnline() { return archbotSeen && (millis()-archbotLastSeen < ARCHBOT_TIMEOUT_MS); }
+void markArchbotSeen() { archbotSeen=true; archbotLastSeen=millis(); archbotIp=server.client().remoteIP().toString(); }
+bool autenticarArchbot() {
+  if (!server.hasHeader("X-ATOM-Key") || server.header("X-ATOM-Key") != ARCHBOT_TOKEN) {
+    server.send(401,"application/json","{\"ok\":false,\"error\":\"No autorizado\"}"); return false;
+  }
+  return true;
+}
+void handleArchbotHeartbeat() {
+  if(!autenticarArchbot()) return;
+  markArchbotSeen(); archbotState="CONECTADO";
+  JsonDocument out; out["ok"]=true; out["server"]="ATOM.ia"; out["groq"]=groqFuncionando;
+  String r; serializeJson(out,r); server.send(200,"application/json",r);
+}
+void handleArchbotEvent() {
+  if(!autenticarArchbot()) return;
+  if(millis()-ultimoEventoRecibidoMs<EVENT_COOLDOWN_MS){server.send(429,"application/json","{\"ok\":false}");return;}
+  ultimoEventoRecibidoMs=millis();
+  if(!server.hasArg("plain") || server.arg("plain").length()>MAX_EVENT_BODY){server.send(400,"application/json","{\"ok\":false}");return;}
+  JsonDocument input; if(deserializeJson(input,server.arg("plain"))){server.send(400,"application/json","{\"ok\":false}");return;}
+  uint16_t estado=input["estado"]|0, id=input["objeto_id"]|0, confianza=input["confianza"]|0; uint32_t evento=input["evento"]|0UL;
+  if(estado!=1 || id<1 || id>6 || confianza>99 || evento==0){server.send(400,"application/json","{\"ok\":false,\"error\":\"Datos invalidos\"}");return;}
+  markArchbotSeen(); archbotObjectId=id; archbotConfidence=confianza; archbotObject=objectNameFromId(id); archbotState="HALLAZGO";
+  bool nuevo=evento!=archbotLastEvent;
+  if(nuevo){archbotLastEvent=evento; Serial.printf("[ARCHBOT] Posible hallazgo #%lu | %s | %u%%\n",(unsigned long)evento,archbotObject.c_str(),confianza);}
+  JsonDocument out; out["ok"]=true; out["nuevo"]=nuevo; out["evento"]=archbotLastEvent; String r; serializeJson(out,r); server.send(200,"application/json",r);
+}
+void handleArchbotStatus() {
+  JsonDocument out; out["connected"]=archbotOnline(); out["state"]=archbotOnline()?archbotState:"DESCONECTADO"; out["ip"]=archbotIp; out["object_id"]=archbotObjectId; out["object"]=archbotObject; out["confidence"]=archbotConfidence; out["event"]=archbotLastEvent;
+  String r; serializeJson(out,r); server.send(200,"application/json",r);
+}
+
+void handleDiscovery() {
+  int packetSize=discoveryUdp.parsePacket(); if(!packetSize)return;
+  char buffer[64]={0}; int len=discoveryUdp.read(buffer,sizeof(buffer)-1); if(len<=0)return;
+  String msg(buffer); msg.trim(); if(msg!="ATOM_IA_DISCOVER")return;
+  IPAddress remote=discoveryUdp.remoteIP(); String ipReply;
+  if(remote[0]==192 && remote[1]==168 && remote[2]==4) ipReply=WiFi.softAPIP().toString();
+  else ipReply=WiFi.localIP().toString();
+  String reply="ATOM_IA:"+ipReply; discoveryUdp.beginPacket(remote,discoveryUdp.remotePort()); discoveryUdp.print(reply); discoveryUdp.endPacket();
+}
+
+String norm(String s){s.toLowerCase();s.replace("á","a");s.replace("é","e");s.replace("í","i");s.replace("ó","o");s.replace("ú","u");s.replace("ñ","n");return s;}
+void sendOffline(const String& answer){JsonDocument out;out["answer"]=answer;out["mode"]="offline";String r;serializeJson(out,r);server.send(200,"application/json; charset=utf-8",r);}
+void offlineFallback(const String& message){
+  String q=norm(message);
+  if(q.indexOf("felipe")>=0 || q.indexOf("coach")>=0 || q.indexOf("tutor")>=0){sendOffline("Felipe González es el profesor y coach/tutor de Los Harneritos. Acompaña al equipo en el desarrollo de ATOM-ArchBot y en su proceso para la competencia.");return;}
+  if(q.indexOf("karla")>=0 || q.indexOf("arqueologa")>=0){sendOffline("Karla Carrasco es una arqueóloga con quien el equipo ha tenido orientación relacionada con arqueología y patrimonio. Esa orientación ayuda al proyecto, pero no significa que ATOM-ArchBot esté certificado profesionalmente.");return;}
+  if(q.indexOf("fuente")>=0){sendOffline("Para normativa y patrimonio chileno, las referencias principales son la Biblioteca del Congreso Nacional de Chile y el Consejo de Monumentos Nacionales. Como apoyo educativo puede usarse el Museo Chileno de Arte Precolombino; para la competencia, World Robot Olympiad Association; y para detalles de ATOM-ArchBot, la documentación interna de Los Harneritos. No inventaré enlaces o citas que no tenga verificadas.");return;}
+  if(q.indexOf("como funciona")>=0 && q.indexOf("atom")>=0){sendOffline("ATOM-ArchBot automatiza parte del movimiento del harnero y combina sensores con visión computacional. La M-Vision detecta una coincidencia visual, MATRIX recibe el evento y puede detener o adaptar el movimiento; luego la ESP32 permite mostrar el estado en ATOM.ia. Una detección no confirma por sí sola que algo sea arqueológico.");return;}
+  if(q.indexOf("problema")>=0 && q.indexOf("atom")>=0){sendOffline("ATOM-ArchBot busca apoyar un proceso que puede ser repetitivo, lento y físicamente demandante: el harneado arqueológico. Su objetivo es automatizar parte del movimiento, apoyar la observación y reducir movimientos innecesarios ante un posible objeto de interés, sin reemplazar a profesionales.");return;}
+  if((q.indexOf("quienes")>=0 || q.indexOf("integrantes")>=0) && q.indexOf("harneritos")>=0){sendOffline("Los Harneritos son Benjamín Martínez, Emily Agurto e Ignacio, estudiantes del Liceo Heriberto Soto Soto de San Fernando. Su coach/tutor es el profesor Felipe González. El equipo combina investigación, diseño, fabricación, programación, electrónica y pruebas.");return;}
+  if(q.indexOf("version")>=0 || q.indexOf("v1")>=0 || q.indexOf("v2")>=0 || q.indexOf("v3")>=0){sendOffline("ATOM-ArchBot ha evolucionado por varias versiones: V1 probó el concepto con Arduino Uno y servos; V2 amplió motores, electrónica y visión con ESP32/ESP32-CAM pero fue más compleja; V3/V3.x usa MATRIX Mini R4 y M-Vision/OpenMV, además de servos, motores DC, final de carrera, sensores láser, pantallas, RGB y buzzer.");return;}
+  if(q.indexOf("segundo lugar")>=0 || q.indexOf("regional")>=0 || q.indexOf("wro")>=0){sendOffline("Los Harneritos obtuvieron 2.º lugar regional en WRO/Futuros Innovadores el 31 de julio de 2026. ATOM-ArchBot siguió en desarrollo después de esa instancia.");return;}
+  sendOffline("Estoy funcionando en modo local. Puedo responder sobre ATOM-ArchBot, Los Harneritos, Felipe González, sus versiones, funcionamiento, objetivos y fuentes. Para preguntas generales necesito recuperar la conexión con Groq.");
+}
+
+void handleOnlineChat(const String& message, JsonArray history, const String& visitorName) {
+  WiFiClientSecure client; client.setInsecure(); HTTPClient https;
+  if(!https.begin(client,GROQ_CHAT_URL)){groqFuncionando=false;estadoLed=LED_INTERNET_SIN_GROQ;offlineFallback(message);return;}
+  https.setTimeout(22000); https.addHeader("Content-Type","application/json"); https.addHeader("Authorization","Bearer "+groqKey);
+
+  JsonDocument req;
+  req["model"]=GROQ_MODEL;
+  req["temperature"]=0.42;
+  req["max_completion_tokens"]=650;
+  JsonArray msgs=req["messages"].to<JsonArray>();
+
+  JsonObject sys=msgs.add<JsonObject>();
+  sys["role"]="system";
+  sys["content"]=FPSTR(SYSTEM_PROMPT);
+
+  if(visitorName.length()){
+    JsonObject who=msgs.add<JsonObject>();
+    who["role"]="system";
+    who["content"]="La persona que está usando esta sesión se llama "+visitorName+". Usa su nombre solo cuando resulte natural.";
+  }
+
+  // La web manda el historial reciente. Lo reenviamos a Groq para conservar el hilo.
+  // Se limita cada mensaje para cuidar la RAM de la ESP32.
+  int total=history.size();
+  int start=total>8 ? total-8 : 0;
+  for(int i=start;i<total;i++){
+    JsonObject item=history[i];
+    String role=item["role"]|"";
+    String content=item["content"]|"";
+    if(role!="user" && role!="assistant") continue;
+    content.trim();
+    if(!content.length()) continue;
+    if(content.length()>700) content=content.substring(0,700);
+
+    // La interfaz incluye la pregunta actual al final del historial; evitamos duplicarla.
+    if(i==total-1 && role=="user" && content==message) continue;
+
+    JsonObject m=msgs.add<JsonObject>();
+    m["role"]=role;
+    m["content"]=content;
+  }
+
+  JsonObject usr=msgs.add<JsonObject>();
+  usr["role"]="user";
+  usr["content"]=message;
+
+  String payload;serializeJson(req,payload);
+  int code=https.POST(payload);String body=https.getString();https.end();
+  if(code<200||code>=300){Serial.printf("Groq chat HTTP %d\n",code);groqFuncionando=false;estadoLed=LED_INTERNET_SIN_GROQ;offlineFallback(message);return;}
+  JsonDocument incoming;if(deserializeJson(incoming,body)){offlineFallback(message);return;}
+  String answer=incoming["choices"][0]["message"]["content"]|"No recibí una respuesta de texto.";
+  groqFuncionando=true;estadoLed=LED_TODO_OK;
+  JsonDocument out;out["answer"]=answer;out["mode"]="online";String r;serializeJson(out,r);server.send(200,"application/json; charset=utf-8",r);
+}
+
+void handleChat(){
+  if(millis()-ultimoChat<CHAT_COOLDOWN_MS){server.send(429,"application/json","{\"error\":\"Espera un momento antes de volver a preguntar.\"}");return;}
+  if(!server.hasArg("plain")){server.send(400,"application/json","{\"error\":\"Falta la pregunta\"}");return;}
+  String raw=server.arg("plain");
+  if(raw.length()>9000){server.send(413,"application/json","{\"error\":\"Conversación demasiado larga para la ESP32. Reinicia la sesión con Alt Gr.\"}");return;}
+  JsonDocument input;if(deserializeJson(input,raw)){server.send(400,"application/json","{\"error\":\"JSON invalido\"}");return;}
+  String message=input["message"]|"";message.trim();if(!message.length()||message.length()>MAX_CHAT_LENGTH){server.send(400,"application/json","{\"error\":\"Pregunta invalida\"}");return;}
+  String visitorName=input["name"]|""; if(visitorName.length()>32) visitorName=visitorName.substring(0,32);
+  JsonArray history=input["history"].as<JsonArray>();
+  ultimoChat=millis();
+  if(WiFi.status()==WL_CONNECTED && groqKey.length()>10) handleOnlineChat(message,history,visitorName); else offlineFallback(message);
+}
+void serveMainPage(){server.send_P(200,"text/html; charset=utf-8",ATOM_IA_INDEX_HTML);}
+void handleStatus(){JsonDocument s;bool internet=WiFi.status()==WL_CONNECTED;s["online"]=internet;s["ai"]=internet&&groqFuncionando;s["groq_configured"]=groqKey.length()>10;s["groq_working"]=groqFuncionando;s["ip_local"]=WiFi.softAPIP().toString();s["ip_wifi"]=internet?WiFi.localIP().toString():"";s["mdns"]=mdnsActivo;s["url_mdns"]=mdnsActivo?"http://atom-ia.local":"";s["archbot"]=archbotOnline();String r;serializeJson(s,r);server.send(200,"application/json",r);}
+
+bool iniciarMDNS(bool mostrarEstado = true) {
+  if (WiFi.status() != WL_CONNECTED) {
+    mdnsActivo = false;
+    return false;
+  }
+
+  if (mdnsActivo) {
+    MDNS.end();
+    mdnsActivo = false;
+    delay(50);
+  }
+
+  mdnsActivo = MDNS.begin("atom-ia");
+
+  if (mdnsActivo) {
+    MDNS.addService("http", "tcp", 80);
+    MDNS.addServiceTxt("http", "tcp", "nombre", "ATOM.ia");
+    MDNS.addServiceTxt("http", "tcp", "proyecto", "ATOM-ArchBot");
+  }
+
+  if (mostrarEstado) {
+    Serial.print("mDNS: ");
+    Serial.println(mdnsActivo ? "ACTIVO · http://atom-ia.local" : "ERROR");
+    if (!mdnsActivo) {
+      Serial.print("Usar IP directa: http://");
+      Serial.println(WiFi.localIP());
+    }
+  }
+
+  return mdnsActivo;
+}
+
+void detenerMDNS() {
+  if (mdnsActivo) {
+    MDNS.end();
+    mdnsActivo = false;
+    Serial.println("mDNS: detenido hasta recuperar WiFi");
+  }
+}
+
+void iniciarRedATOM(){IPAddress ip(192,168,4,1),gw(192,168,4,1),sub(255,255,255,0);WiFi.softAPConfig(ip,gw,sub);bool ok=WiFi.softAP(ATOM_AP_SSID,ATOM_AP_PASS,1,0,4);Serial.println(ok?"Red ATOM-ARCHBOT activa":"Error creando ATOM-ARCHBOT");Serial.print("Respaldo: http://");Serial.println(WiFi.softAPIP());}
+void conectarInternet(){
+  estadoLed=LED_ARRANCANDO;Serial.print("Conectando a: ");Serial.println(WIFI_SSID);WiFi.begin(WIFI_SSID,WIFI_PASS);intentoWifiActivo=true;uint32_t start=millis();
+  while(WiFi.status()!=WL_CONNECTED && millis()-start<WIFI_TIMEOUT_MS){actualizarLed();delay(100);} intentoWifiActivo=false;
+  if(WiFi.status()==WL_CONNECTED){wifiEstabaConectado=true;estadoLed=LED_INTERNET_SIN_GROQ;Serial.print("WiFi conectado · IP: ");Serial.println(WiFi.localIP());comprobarGroq(true);}
+  else{wifiEstabaConectado=false;estadoLed=LED_SIN_INTERNET;Serial.println("Sin Internet · ATOM.ia local sigue activa");}
+}
+void mantenerInternet(){
+  wl_status_t s = WiFi.status();
+
+  if (s == WL_CONNECTED) {
+    if (!wifiEstabaConectado) {
+      wifiEstabaConectado = true;
+      intentoWifiActivo = false;
+      estadoLed = LED_INTERNET_SIN_GROQ;
+
+      Serial.println();
+      Serial.println("WiFi: RECONECTADO");
+      Serial.print("IP: http://");
+      Serial.println(WiFi.localIP());
+
+      // Al recuperar la red, volvemos a publicar atom-ia.local.
+      iniciarMDNS(true);
+      comprobarGroq(true);
+      ultimoChequeoGroq = millis();
+    }
+    return;
+  }
+
+  if (wifiEstabaConectado) {
+    wifiEstabaConectado = false;
+    groqFuncionando = false;
+    estadoLed = LED_SIN_INTERNET;
+    detenerMDNS();
+    Serial.println("WiFi: DESCONECTADO · ATOM.ia local sigue disponible por ATOM-ARCHBOT");
+  }
+
+  if (intentoWifiActivo || millis() - ultimoIntentoWiFi < WIFI_RETRY_MS) return;
+
+  ultimoIntentoWiFi = millis();
+  intentoWifiActivo = true;
+  Serial.println("Reintentando WiFi principal...");
+
+  // Reinicio limpio del STA. Evita llamar WiFi.begin() una y otra vez mientras ya conecta.
+  WiFi.disconnect(false, false);
+  delay(150);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  uint32_t st = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - st < 7000) {
+    server.handleClient();
+    handleDiscovery();
+    actualizarLed();
+    delay(25);
+  }
+
+  intentoWifiActivo = false;
+}
+
+void mantenerGroq(){if(WiFi.status()!=WL_CONNECTED){groqFuncionando=false;return;}if(millis()-ultimoChequeoGroq<GROQ_CHECK_MS)return;ultimoChequeoGroq=millis();comprobarGroq(false);}
+
+void iniciarServidor(){
+  const char* headers[]={"X-ATOM-Key"};server.collectHeaders(headers,1);
+  server.on("/",HTTP_GET,serveMainPage);server.on("/index.html",HTTP_GET,serveMainPage);server.on("/api/status",HTTP_GET,handleStatus);server.on("/api/chat",HTTP_POST,handleChat);server.on("/api/archbot/heartbeat",HTTP_POST,handleArchbotHeartbeat);server.on("/api/archbot/event",HTTP_POST,handleArchbotEvent);server.on("/api/archbot/status",HTTP_GET,handleArchbotStatus);server.onNotFound([](){server.send(404,"text/plain","No encontrado");});server.begin();
+  discoveryUdp.begin(DISCOVERY_PORT);
+  iniciarMDNS(true);
+  Serial.println("============================");Serial.println("ATOM.IA LISTA");if(WiFi.status()==WL_CONNECTED){Serial.println("Principal: http://atom-ia.local");Serial.print("IP principal: http://");Serial.println(WiFi.localIP());}Serial.println("Respaldo: WiFi ATOM-ARCHBOT · http://192.168.4.1");Serial.print("Internet: ");Serial.println(WiFi.status()==WL_CONNECTED?"FUNCIONANDO":"SIN CONEXION");Serial.print("Groq: ");Serial.println(groqFuncionando?"FUNCIONANDO":"NO DISPONIBLE");Serial.println("Esperando ATOM-ArchBot...");Serial.println("============================");
+}
+
+void setup(){pinMode(LED_PIN,OUTPUT);ledFisico(false);estadoLed=LED_ARRANCANDO;Serial.begin(115200);delay(700);Serial.println("ATOM.IA · INICIO AUTOMATICO");cargarGroqKey();WiFi.mode(WIFI_AP_STA);WiFi.setAutoReconnect(true);WiFi.persistent(false);iniciarRedATOM();conectarInternet();iniciarServidor();ultimoChequeoGroq=millis();}
+void loop(){server.handleClient();handleDiscovery();mantenerInternet();mantenerGroq();actualizarLed();if(archbotSeen&&!archbotOnline()&&archbotState!="DESCONECTADO"){archbotState="DESCONECTADO";Serial.println("ATOM-ArchBot: OFFLINE");}delay(2);}
