@@ -1,0 +1,1305 @@
+#include <MatrixMiniR4.h>
+#include <WiFiS3.h>
+
+// ============================================================
+// ATOM-ARCHBOT - MATRIX MINI R4
+// PRUEBA DE COMUNICACION CON ATOM.IA
+//
+// BOTON DERECHO ARRIBA:
+// Selecciona SELLO / PUNTA
+//
+// BOTON DERECHO ABAJO:
+// Envia un hallazgo simulado al ESP32
+// ============================================================
+
+
+// ============================================================
+// WIFI DEL ESP32
+// ============================================================
+
+const char WIFI_SSID[] = "ATOM-ARCHBOT";
+const char WIFI_PASS[] = "ATOM2026-Harnero!";
+
+
+// ============================================================
+// ESP32 / ATOM.IA
+// ============================================================
+
+IPAddress ESP32_IP(192, 168, 4, 1);
+
+const uint16_t ESP32_PORT = 80;
+
+const char ARCHBOT_TOKEN[] =
+    "A7mQ2xP9kL4vR8sT6cN3";
+
+
+// ============================================================
+// CLIENTE WIFI
+// ============================================================
+
+WiFiClient cliente;
+
+
+// ============================================================
+// OBJETOS
+// ============================================================
+
+const uint8_t OBJETO_SELLO = 1;
+const uint8_t OBJETO_PUNTA = 2;
+
+uint8_t objetoSeleccionado = OBJETO_SELLO;
+
+
+// Confianza falsa SOLO para esta prueba manual
+uint8_t confianzaSimulada = 95;
+
+
+// Cada envio debe tener un numero de evento distinto
+uint32_t contadorEventos = 0;
+
+
+// ============================================================
+// BOTONES
+// ============================================================
+
+bool botonArribaAnterior = false;
+bool botonAbajoAnterior = false;
+
+unsigned long ultimoBotonArriba = 0;
+unsigned long ultimoBotonAbajo = 0;
+
+const unsigned long DEBOUNCE_BOTON = 180;
+
+
+// ============================================================
+// HEARTBEAT
+// ============================================================
+
+unsigned long ultimoHeartbeat = 0;
+
+const unsigned long INTERVALO_HEARTBEAT = 3000;
+
+
+// ============================================================
+// WIFI
+// ============================================================
+
+unsigned long ultimoIntentoWiFi = 0;
+
+const unsigned long INTERVALO_RECONEXION_WIFI = 5000;
+
+bool wifiConectadoAnterior = false;
+
+
+// ============================================================
+// ESTADO DE ENVIO
+// ============================================================
+
+String estadoEnvio = "LISTO";
+
+unsigned long tiempoEstadoEnvio = 0;
+
+const unsigned long TIEMPO_MENSAJE = 1800;
+
+
+// ============================================================
+// NOMBRE OBJETO
+// ============================================================
+
+const char* nombreObjeto(uint8_t id)
+{
+    switch (id)
+    {
+        case 1:
+            return "SELLO";
+
+        case 2:
+            return "PUNTA";
+
+        default:
+            return "NINGUNO";
+    }
+}
+
+
+// ============================================================
+// RGB
+// ============================================================
+
+void rgbRojo()
+{
+    MiniR4.LED.setColor(1, 255, 0, 0);
+    MiniR4.LED.setColor(2, 255, 0, 0);
+}
+
+
+void rgbVerde()
+{
+    MiniR4.LED.setColor(1, 0, 255, 0);
+    MiniR4.LED.setColor(2, 0, 255, 0);
+}
+
+
+void rgbAzul()
+{
+    MiniR4.LED.setColor(1, 0, 80, 255);
+    MiniR4.LED.setColor(2, 0, 80, 255);
+}
+
+
+void rgbNaranja()
+{
+    MiniR4.LED.setColor(1, 255, 80, 0);
+    MiniR4.LED.setColor(2, 255, 80, 0);
+}
+
+
+void rgbApagado()
+{
+    MiniR4.LED.setColor(1, 0, 0, 0);
+    MiniR4.LED.setColor(2, 0, 0, 0);
+}
+
+
+// ============================================================
+// SONIDO ENVIO OK
+// ============================================================
+
+void sonidoEnvioCorrecto()
+{
+    MiniR4.Buzzer.Tone(
+        NOTE_C5,
+        80
+    );
+
+    delay(100);
+
+    MiniR4.Buzzer.Tone(
+        NOTE_E5,
+        80
+    );
+
+    delay(100);
+
+    MiniR4.Buzzer.Tone(
+        NOTE_G5,
+        150
+    );
+
+    delay(170);
+
+    MiniR4.Buzzer.NoTone();
+}
+
+
+// ============================================================
+// SONIDO ERROR
+// ============================================================
+
+void sonidoError()
+{
+    MiniR4.Buzzer.Tone(
+        NOTE_C4,
+        120
+    );
+
+    delay(150);
+
+    MiniR4.Buzzer.Tone(
+        NOTE_G3,
+        180
+    );
+
+    delay(200);
+
+    MiniR4.Buzzer.NoTone();
+}
+
+
+// ============================================================
+// PANTALLA CONECTANDO
+// ============================================================
+
+void pantallaConectando()
+{
+    MiniR4.OLED.clearDisplay();
+
+    MiniR4.OLED.setTextSize(1);
+
+    MiniR4.OLED.setCursor(15, 0);
+    MiniR4.OLED.print("ATOM ARCHBOT");
+
+    MiniR4.OLED.setCursor(5, 12);
+    MiniR4.OLED.print("Conectando a IA");
+
+    MiniR4.OLED.setCursor(10, 23);
+    MiniR4.OLED.print("ATOM-ARCHBOT");
+
+    MiniR4.OLED.display();
+}
+
+
+// ============================================================
+// PANTALLA MENU
+// ============================================================
+
+void pantallaMenu()
+{
+    MiniR4.OLED.clearDisplay();
+
+    MiniR4.OLED.setTextSize(1);
+
+    MiniR4.OLED.setCursor(20, 0);
+    MiniR4.OLED.print("ATOM -> IA");
+
+
+    // --------------------------------------------------------
+    // WIFI
+    // --------------------------------------------------------
+
+    MiniR4.OLED.setCursor(0, 10);
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        MiniR4.OLED.print("IA: CONECTADA");
+    }
+    else
+    {
+        MiniR4.OLED.print("IA: SIN RED");
+    }
+
+
+    // --------------------------------------------------------
+    // OBJETO
+    // --------------------------------------------------------
+
+    MiniR4.OLED.setCursor(0, 20);
+
+    MiniR4.OLED.print("> ");
+
+    MiniR4.OLED.print(
+        nombreObjeto(
+            objetoSeleccionado
+        )
+    );
+
+
+    MiniR4.OLED.display();
+}
+
+
+// ============================================================
+// PANTALLA ENVIANDO
+// ============================================================
+
+void pantallaEnviando()
+{
+    MiniR4.OLED.clearDisplay();
+
+    MiniR4.OLED.setTextSize(1);
+
+    MiniR4.OLED.setCursor(22, 0);
+    MiniR4.OLED.print("ATOM -> IA");
+
+    MiniR4.OLED.setCursor(0, 11);
+    MiniR4.OLED.print("Enviando:");
+
+    MiniR4.OLED.setCursor(0, 22);
+
+    MiniR4.OLED.print(
+        nombreObjeto(
+            objetoSeleccionado
+        )
+    );
+
+    MiniR4.OLED.print("...");
+
+    MiniR4.OLED.display();
+}
+
+
+// ============================================================
+// PANTALLA ENVIADO
+// ============================================================
+
+void pantallaEnviado()
+{
+    MiniR4.OLED.clearDisplay();
+
+    MiniR4.OLED.setTextSize(1);
+
+    MiniR4.OLED.setCursor(20, 0);
+    MiniR4.OLED.print("ATOM -> IA");
+
+    MiniR4.OLED.setCursor(0, 10);
+    MiniR4.OLED.print("ENVIADO OK");
+
+    MiniR4.OLED.setCursor(0, 20);
+
+    MiniR4.OLED.print(
+        nombreObjeto(
+            objetoSeleccionado
+        )
+    );
+
+    MiniR4.OLED.print("  E:");
+
+    MiniR4.OLED.print(
+        contadorEventos
+    );
+
+    MiniR4.OLED.display();
+}
+
+
+// ============================================================
+// PANTALLA ERROR
+// ============================================================
+
+void pantallaError()
+{
+    MiniR4.OLED.clearDisplay();
+
+    MiniR4.OLED.setTextSize(1);
+
+    MiniR4.OLED.setCursor(20, 0);
+    MiniR4.OLED.print("ATOM -> IA");
+
+    MiniR4.OLED.setCursor(0, 11);
+    MiniR4.OLED.print("ERROR DE ENVIO");
+
+    MiniR4.OLED.setCursor(0, 22);
+    MiniR4.OLED.print("Revisar ESP32");
+
+    MiniR4.OLED.display();
+}
+
+
+// ============================================================
+// CONECTAR WIFI
+// ============================================================
+
+void conectarWiFi()
+{
+    pantallaConectando();
+
+    rgbAzul();
+
+    Serial.println();
+
+    Serial.println(
+        "============================"
+    );
+
+    Serial.println(
+        "MATRIX -> ATOM.IA"
+    );
+
+    Serial.print(
+        "Conectando a: "
+    );
+
+    Serial.println(
+        WIFI_SSID
+    );
+
+
+    WiFi.begin(
+        WIFI_SSID,
+        WIFI_PASS
+    );
+
+
+    unsigned long inicio =
+        millis();
+
+
+    while (
+        WiFi.status() != WL_CONNECTED
+        &&
+        millis() - inicio < 15000
+    )
+    {
+        delay(250);
+    }
+
+
+    if (
+        WiFi.status()
+        ==
+        WL_CONNECTED
+    )
+    {
+        wifiConectadoAnterior = true;
+
+        rgbVerde();
+
+        Serial.println();
+
+        Serial.println(
+            "WIFI CONECTADO"
+        );
+
+        Serial.print(
+            "IP MATRIX: "
+        );
+
+        Serial.println(
+            WiFi.localIP()
+        );
+
+        Serial.print(
+            "ESP32: "
+        );
+
+        Serial.println(
+            ESP32_IP
+        );
+
+        delay(600);
+    }
+    else
+    {
+        wifiConectadoAnterior = false;
+
+        rgbNaranja();
+
+        Serial.println();
+
+        Serial.println(
+            "NO SE PUDO CONECTAR"
+        );
+
+        Serial.println(
+            "Reintentara automaticamente."
+        );
+
+        delay(600);
+    }
+
+
+    pantallaMenu();
+}
+
+
+// ============================================================
+// MANTENER WIFI
+// ============================================================
+
+void mantenerWiFi()
+{
+    bool conectado =
+        WiFi.status()
+        ==
+        WL_CONNECTED;
+
+
+    if (
+        conectado
+        &&
+        !wifiConectadoAnterior
+    )
+    {
+        wifiConectadoAnterior = true;
+
+        Serial.println();
+
+        Serial.println(
+            "WIFI RECONECTADO"
+        );
+
+        Serial.print(
+            "IP MATRIX: "
+        );
+
+        Serial.println(
+            WiFi.localIP()
+        );
+
+        rgbVerde();
+
+        pantallaMenu();
+    }
+
+
+    if (
+        !conectado
+        &&
+        wifiConectadoAnterior
+    )
+    {
+        wifiConectadoAnterior = false;
+
+        Serial.println();
+
+        Serial.println(
+            "WIFI DESCONECTADO"
+        );
+
+        rgbNaranja();
+
+        pantallaMenu();
+    }
+
+
+    if (
+        !conectado
+        &&
+        millis() - ultimoIntentoWiFi
+        >=
+        INTERVALO_RECONEXION_WIFI
+    )
+    {
+        ultimoIntentoWiFi =
+            millis();
+
+        Serial.println(
+            "Reintentando WiFi..."
+        );
+
+        WiFi.begin(
+            WIFI_SSID,
+            WIFI_PASS
+        );
+    }
+}
+
+
+// ============================================================
+// LEER RESPUESTA HTTP
+// ============================================================
+
+int leerCodigoHTTP(
+    WiFiClient &c
+)
+{
+    unsigned long inicio =
+        millis();
+
+    while (
+        !c.available()
+        &&
+        millis() - inicio < 2500
+    )
+    {
+        delay(1);
+    }
+
+
+    if (!c.available())
+    {
+        return -1;
+    }
+
+
+    String linea =
+        c.readStringUntil('\n');
+
+    linea.trim();
+
+
+    // Ejemplo:
+    // HTTP/1.1 200 OK
+
+    if (
+        !linea.startsWith(
+            "HTTP/"
+        )
+    )
+    {
+        return -1;
+    }
+
+
+    int espacio1 =
+        linea.indexOf(' ');
+
+    if (espacio1 < 0)
+    {
+        return -1;
+    }
+
+
+    int espacio2 =
+        linea.indexOf(
+            ' ',
+            espacio1 + 1
+        );
+
+
+    String codigoTexto;
+
+
+    if (espacio2 > 0)
+    {
+        codigoTexto =
+            linea.substring(
+                espacio1 + 1,
+                espacio2
+            );
+    }
+    else
+    {
+        codigoTexto =
+            linea.substring(
+                espacio1 + 1
+            );
+    }
+
+
+    return codigoTexto.toInt();
+}
+
+
+// ============================================================
+// HEARTBEAT
+// ============================================================
+
+bool enviarHeartbeat()
+{
+    if (
+        WiFi.status()
+        !=
+        WL_CONNECTED
+    )
+    {
+        return false;
+    }
+
+
+    WiFiClient c;
+
+
+    if (
+        !c.connect(
+            ESP32_IP,
+            ESP32_PORT
+        )
+    )
+    {
+        return false;
+    }
+
+
+    String body = "{}";
+
+
+    c.println(
+        "POST /api/archbot/heartbeat HTTP/1.1"
+    );
+
+    c.print("Host: ");
+    c.println(ESP32_IP);
+
+    c.print("X-ATOM-Key: ");
+    c.println(ARCHBOT_TOKEN);
+
+    c.println(
+        "Content-Type: application/json"
+    );
+
+    c.print(
+        "Content-Length: "
+    );
+
+    c.println(
+        body.length()
+    );
+
+    c.println(
+        "Connection: close"
+    );
+
+    c.println();
+
+    c.print(body);
+
+
+    int codigo =
+        leerCodigoHTTP(c);
+
+
+    c.stop();
+
+
+    return (
+        codigo >= 200
+        &&
+        codigo < 300
+    );
+}
+
+
+// ============================================================
+// MANTENER HEARTBEAT
+// ============================================================
+
+void mantenerHeartbeat()
+{
+    if (
+        millis()
+        -
+        ultimoHeartbeat
+        <
+        INTERVALO_HEARTBEAT
+    )
+    {
+        return;
+    }
+
+
+    ultimoHeartbeat =
+        millis();
+
+
+    if (
+        WiFi.status()
+        !=
+        WL_CONNECTED
+    )
+    {
+        return;
+    }
+
+
+    bool ok =
+        enviarHeartbeat();
+
+
+    if (ok)
+    {
+        Serial.println(
+            "Heartbeat -> ATOM.IA OK"
+        );
+    }
+    else
+    {
+        Serial.println(
+            "Heartbeat -> ERROR"
+        );
+    }
+}
+
+
+// ============================================================
+// ENVIAR EVENTO
+// ============================================================
+
+bool enviarEvento(
+    uint8_t objeto,
+    uint8_t confianza,
+    uint32_t evento
+)
+{
+    if (
+        WiFi.status()
+        !=
+        WL_CONNECTED
+    )
+    {
+        Serial.println(
+            "No se puede enviar: WiFi desconectado"
+        );
+
+        return false;
+    }
+
+
+    WiFiClient c;
+
+
+    Serial.println();
+
+    Serial.println(
+        "Conectando con ESP32..."
+    );
+
+
+    if (
+        !c.connect(
+            ESP32_IP,
+            ESP32_PORT
+        )
+    )
+    {
+        Serial.println(
+            "ERROR conectando con 192.168.4.1"
+        );
+
+        return false;
+    }
+
+
+    // --------------------------------------------------------
+    // JSON
+    // --------------------------------------------------------
+
+    String body = "{";
+
+    body += "\"estado\":1,";
+
+    body += "\"objeto_id\":";
+    body += String(objeto);
+    body += ",";
+
+    body += "\"confianza\":";
+    body += String(confianza);
+    body += ",";
+
+    body += "\"evento\":";
+    body += String(evento);
+
+    body += "}";
+
+
+    Serial.println();
+
+    Serial.println(
+        "ENVIANDO A ATOM.IA:"
+    );
+
+    Serial.println(body);
+
+
+    // --------------------------------------------------------
+    // HTTP
+    // --------------------------------------------------------
+
+    c.println(
+        "POST /api/archbot/event HTTP/1.1"
+    );
+
+    c.print("Host: ");
+    c.println(ESP32_IP);
+
+    c.print("X-ATOM-Key: ");
+    c.println(ARCHBOT_TOKEN);
+
+    c.println(
+        "Content-Type: application/json"
+    );
+
+    c.print(
+        "Content-Length: "
+    );
+
+    c.println(
+        body.length()
+    );
+
+    c.println(
+        "Connection: close"
+    );
+
+    c.println();
+
+    c.print(body);
+
+
+    int codigo =
+        leerCodigoHTTP(c);
+
+
+    Serial.print(
+        "HTTP: "
+    );
+
+    Serial.println(
+        codigo
+    );
+
+
+    // Vaciar respuesta restante
+
+    unsigned long limite =
+        millis();
+
+    while (
+        millis() - limite < 300
+    )
+    {
+        while (c.available())
+        {
+            c.read();
+        }
+
+        if (!c.connected())
+        {
+            break;
+        }
+    }
+
+
+    c.stop();
+
+
+    return (
+        codigo >= 200
+        &&
+        codigo < 300
+    );
+}
+
+
+// ============================================================
+// CAMBIAR OBJETO
+// BOTON DERECHO ARRIBA
+// ============================================================
+
+void cambiarObjeto()
+{
+    if (
+        objetoSeleccionado
+        ==
+        OBJETO_SELLO
+    )
+    {
+        objetoSeleccionado =
+            OBJETO_PUNTA;
+    }
+    else
+    {
+        objetoSeleccionado =
+            OBJETO_SELLO;
+    }
+
+
+    Serial.print(
+        "Seleccionado: "
+    );
+
+    Serial.println(
+        nombreObjeto(
+            objetoSeleccionado
+        )
+    );
+
+
+    MiniR4.Buzzer.Tone(
+        NOTE_C5,
+        50
+    );
+
+    delay(60);
+
+    MiniR4.Buzzer.NoTone();
+
+
+    pantallaMenu();
+}
+
+
+// ============================================================
+// ENVIAR OBJETO SELECCIONADO
+// BOTON DERECHO ABAJO
+// ============================================================
+
+void enviarSeleccionado()
+{
+    contadorEventos++;
+
+
+    if (
+        contadorEventos == 0
+    )
+    {
+        contadorEventos = 1;
+    }
+
+
+    pantallaEnviando();
+
+    rgbAzul();
+
+
+    Serial.println();
+
+    Serial.println(
+        "============================"
+    );
+
+    Serial.println(
+        "HALLAZGO SIMULADO"
+    );
+
+    Serial.print(
+        "Objeto: "
+    );
+
+    Serial.println(
+        nombreObjeto(
+            objetoSeleccionado
+        )
+    );
+
+    Serial.print(
+        "Confianza: "
+    );
+
+    Serial.print(
+        confianzaSimulada
+    );
+
+    Serial.println("%");
+
+    Serial.print(
+        "Evento: "
+    );
+
+    Serial.println(
+        contadorEventos
+    );
+
+    Serial.println(
+        "============================"
+    );
+
+
+    bool enviado =
+        enviarEvento(
+            objetoSeleccionado,
+            confianzaSimulada,
+            contadorEventos
+        );
+
+
+    if (enviado)
+    {
+        estadoEnvio =
+            "OK";
+
+        tiempoEstadoEnvio =
+            millis();
+
+        rgbVerde();
+
+        pantallaEnviado();
+
+        sonidoEnvioCorrecto();
+
+        Serial.println(
+            "EVENTO RECIBIDO POR ATOM.IA"
+        );
+    }
+    else
+    {
+        estadoEnvio =
+            "ERROR";
+
+        tiempoEstadoEnvio =
+            millis();
+
+        rgbRojo();
+
+        pantallaError();
+
+        sonidoError();
+
+        Serial.println(
+            "ERROR ENVIANDO EVENTO"
+        );
+    }
+}
+
+
+// ============================================================
+// BOTONES
+// ============================================================
+
+void actualizarBotones()
+{
+    // --------------------------------------------------------
+    // BOTON DERECHO ARRIBA
+    // --------------------------------------------------------
+
+    bool arriba =
+        MiniR4.BTN_UP.getState();
+
+
+    if (
+        arriba
+        &&
+        !botonArribaAnterior
+        &&
+        millis() - ultimoBotonArriba
+        >=
+        DEBOUNCE_BOTON
+    )
+    {
+        ultimoBotonArriba =
+            millis();
+
+        cambiarObjeto();
+    }
+
+
+    botonArribaAnterior =
+        arriba;
+
+
+    // --------------------------------------------------------
+    // BOTON DERECHO ABAJO
+    // --------------------------------------------------------
+
+    bool abajo =
+        MiniR4.BTN_DOWN.getState();
+
+
+    if (
+        abajo
+        &&
+        !botonAbajoAnterior
+        &&
+        millis() - ultimoBotonAbajo
+        >=
+        DEBOUNCE_BOTON
+    )
+    {
+        ultimoBotonAbajo =
+            millis();
+
+        enviarSeleccionado();
+    }
+
+
+    botonAbajoAnterior =
+        abajo;
+}
+
+
+// ============================================================
+// RESTAURAR MENU DESPUES DEL ENVIO
+// ============================================================
+
+void actualizarEstadoPantalla()
+{
+    if (
+        estadoEnvio == "LISTO"
+    )
+    {
+        return;
+    }
+
+
+    if (
+        millis()
+        -
+        tiempoEstadoEnvio
+        <
+        TIEMPO_MENSAJE
+    )
+    {
+        return;
+    }
+
+
+    estadoEnvio =
+        "LISTO";
+
+
+    if (
+        WiFi.status()
+        ==
+        WL_CONNECTED
+    )
+    {
+        rgbVerde();
+    }
+    else
+    {
+        rgbNaranja();
+    }
+
+
+    pantallaMenu();
+}
+
+
+// ============================================================
+// SETUP
+// ============================================================
+
+void setup()
+{
+    MiniR4.begin();
+
+    Serial.begin(115200);
+
+
+    MiniR4.LED.setBrightness(
+        1,
+        80
+    );
+
+    MiniR4.LED.setBrightness(
+        2,
+        80
+    );
+
+
+    rgbApagado();
+
+
+    Serial.println();
+
+    Serial.println(
+        "============================"
+    );
+
+    Serial.println(
+        "ATOM ARCHBOT"
+    );
+
+    Serial.println(
+        "PRUEBA MATRIX -> ESP32"
+    );
+
+    Serial.println(
+        "============================"
+    );
+
+
+    conectarWiFi();
+
+
+    pantallaMenu();
+
+
+    Serial.println();
+
+    Serial.println(
+        "CONTROLES:"
+    );
+
+    Serial.println(
+        "ARRIBA = cambiar objeto"
+    );
+
+    Serial.println(
+        "ABAJO = enviar a ATOM.IA"
+    );
+
+    Serial.println();
+
+    Serial.println(
+        "LISTO"
+    );
+}
+
+
+// ============================================================
+// LOOP
+// ============================================================
+
+void loop()
+{
+    mantenerWiFi();
+
+    mantenerHeartbeat();
+
+    actualizarBotones();
+
+    actualizarEstadoPantalla();
+
+    delay(2);
+}
