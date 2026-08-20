@@ -1,6 +1,7 @@
 #pragma once
 
 const char ATOM_IA_INDEX_HTML[] PROGMEM = R"ATOMHTML(
+
 <!doctype html>
 <html lang="es">
 <head>
@@ -63,7 +64,7 @@ body{background:radial-gradient(circle at 82% -5%,rgba(83,0,0,.08),transparent 3
  </div>
  <div class="sectionTitle"><h3>Todo en un solo lugar</h3><span id="homeStatus">Sistema iniciando…</span></div>
  <div class="grid4">
-  <button class="tile" onclick="go('chat')"><div class="ti">💬</div><h4>Preguntar lo que quieras</h4><p>Con Groq disponible puedo conversar sobre temas generales y también conozco especialmente el proyecto.</p></button>
+  <button class="tile" onclick="go('chat')"><div class="ti">💬</div><h4>Preguntar lo que quieras</h4><p>Con la IA online disponible puedo conversar sobre temas generales y también conozco especialmente el proyecto.</p></button>
   <button class="tile" onclick="go('archbot')"><div class="ti">🤖</div><h4>ATOM-ArchBot en vivo</h4><p>Consulta conexión, estado, objeto identificado, confianza visual y número de evento.</p></button>
   <button class="tile" onclick="go('sources')"><div class="ti">📚</div><h4>Fuentes claras</h4><p>Separamos fuentes institucionales, orientación externa y documentación interna del equipo.</p></button>
   <button class="tile" onclick="go('team')"><div class="ti">⚙️</div><h4>Los Harneritos</h4><p>Conoce el equipo, el problema que busca abordar y la evolución de ATOM-ArchBot.</p></button>
@@ -88,7 +89,7 @@ body{background:radial-gradient(circle at 82% -5%,rgba(83,0,0,.08),transparent 3
  <div class="infoGrid"><div class="infoCard"><h2>El equipo</h2><div class="role"><b>Benjamín</b><p>Diseño mecánico, CAD, fabricación, integración de sensores, visión computacional, pruebas y desarrollo del prototipo.</p></div><div class="role"><b>Emily</b><p>Investigación, recopilación de antecedentes, comunicación, contenidos, entrevistas y apoyo en la presentación del problema e impacto.</p></div><div class="role"><b>Ignacio</b><p>Programación, electrónica, actuadores e integración funcional del sistema.</p></div></div><div class="infoCard"><h2>La idea</h2><p>ATOM-ArchBot nace para explorar cómo la automatización puede apoyar el harneado, reducir parte del esfuerzo repetitivo y ayudar a advertir objetos de interés sin reemplazar el criterio humano.</p><p>El proyecto ha evolucionado mediante varias versiones, pruebas, fabricación digital y aprendizaje de errores reales del prototipo.</p></div></div>
 </section>
 <section class="page hidden" id="page-about">
- <div class="infoGrid"><div class="infoCard"><div class="kicker">Identidad</div><h2>Sobre ATOM.ia</h2><p>ATOM.ia es la interfaz educativa y conversacional de Los Harneritos. Puede responder preguntas generales cuando la IA online está disponible y conserva respuestas esenciales sobre ATOM-ArchBot cuando no hay Internet.</p><p>Su objetivo es explicar con claridad, reconocer incertidumbre y no presentar como hechos datos que no puede respaldar.</p></div><div class="infoCard"><div class="kicker">Conexión</div><h2>Diseñada para competencia</h2><p>La ESP32 intenta conectarse automáticamente a la red principal para utilizar Groq. A la vez mantiene la red de respaldo <b>ATOM-ARCHBOT</b>, desde la que la interfaz puede abrirse en <b>192.168.4.1</b>.</p><p>Si Internet cae, la web y la comunicación local con el robot pueden seguir funcionando.</p></div></div>
+ <div class="infoGrid"><div class="infoCard"><div class="kicker">Identidad</div><h2>Sobre ATOM.ia</h2><p>ATOM.ia es la interfaz educativa y conversacional de Los Harneritos. Puede responder preguntas generales cuando la IA online está disponible y conserva respuestas esenciales sobre ATOM-ArchBot cuando no hay Internet.</p><p>Su objetivo es explicar con claridad, reconocer incertidumbre y no presentar como hechos datos que no puede respaldar.</p></div><div class="infoCard"><div class="kicker">Conexión</div><h2>Enlace directo para competencia</h2><p>El PC y MATRIX se conectan directamente a <b>ATOM-ARCHBOT</b>. El PC abre siempre <b>http://192.168.4.1</b>, sin depender del router ni de atom-ia.local.</p><p>En paralelo, la ESP32 se conecta al Wi-Fi de la casa o al hotspot del celular únicamente para dar Internet a la IA online. Aunque ese Internet falle, la página local y la comunicación con MATRIX continúan activas.</p></div></div>
 </section>
 <section class="page hidden" id="page-fun">
  <div class="panelHero"><div><div class="kicker">Curiosidad sin presión</div><h2>Pregunta algo inesperado.</h2><p>ATOM.ia también puede conversar fuera del proyecto. Estas ideas van directo al chat.</p></div><div class="signal">✦</div></div><div class="funGrid" style="margin-top:14px"><button class="funCard" onclick="ask('Cuéntame un dato arqueológico sorprendente')"><span>🏺</span><h3>Dato curioso</h3><p>Algo breve e interesante sobre arqueología o patrimonio.</p></button><button class="funCard" onclick="ask('Cuéntame un chiste corto y bueno')"><span>😄</span><h3>Un chiste</h3><p>Porque una feria también necesita un momento ligero.</p></button><button class="funCard" onclick="ask('Explícame una tecnología sorprendente de forma sencilla')"><span>⚡</span><h3>Tecnología</h3><p>Descubre una idea tecnológica sin complicaciones innecesarias.</p></button><button class="funCard" onclick="ask('Hazme una pregunta de cultura general y luego dime la respuesta')"><span>🌎</span><h3>Mini reto</h3><p>Pon a prueba tu curiosidad con una pregunta rápida.</p></button></div>
@@ -98,7 +99,50 @@ body{background:radial-gradient(circle at 82% -5%,rgba(83,0,0,.08),transparent 3
 <script>
 const $=s=>document.querySelector(s), side=$('#side');
 const titles={home:'Inicio',chat:'Chat con ATOM.ia',archbot:'ATOM-ArchBot',sources:'Fuentes',team:'Los Harneritos',about:'Sobre ATOM.ia',fun:'Explorar y divertirse'};
-let userName=localStorage.getItem('atomia_name')||'', history=[];try{history=JSON.parse(sessionStorage.getItem('atomia_history')||'[]')}catch(e){history=[]}let lastEvent=0;
+let userName=localStorage.getItem('atomia_name')||'', history=[];try{history=JSON.parse(sessionStorage.getItem('atomia_history')||'[]')}catch(e){history=[]}let lastEvent=Number(sessionStorage.getItem('atomia_last_event')||0);let robotWasOnline=sessionStorage.getItem('atomia_robot_online')==='1';
+// VERSION DIRECTA: PC y MATRIX usan ATOM-ARCHBOT / 192.168.4.1.
+// La red principal queda exclusivamente para que la ESP32 acceda a Groq.
+const directAp=location.hostname==='192.168.4.1';
+let apiBase='';
+const mdnsBase='http://atom-ia.local';
+sessionStorage.removeItem('atomia_sta_base');
+let statusBusy=false;
+let chatBusy=false;
+let statusFailures=0;
+let archbotBusy=false;
+let archbotFailures=0;
+function apiUrl(path){return apiBase?apiBase+path:path}
+async function fetchJsonFrom(base,path,options={},timeout=3000,attempts=2){
+ let lastError;
+ for(let attempt=0;attempt<attempts;attempt++){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeout);
+  try{
+   const r=await fetch(base?base+path:path,{cache:'no-store',...options,signal:controller.signal});
+   if(!r.ok)throw new Error('HTTP '+r.status);
+   return await r.json();
+  }catch(e){lastError=e;if(attempt+1<attempts)await sleep(180)}
+  finally{clearTimeout(timer)}
+ }
+ throw lastError||new Error('Sin respuesta');
+}
+async function fetchJsonAnyFrom(base,path,options={},timeout=3000,attempts=1){
+ let lastError;
+ for(let attempt=0;attempt<attempts;attempt++){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeout);
+  try{
+   const r=await fetch(base?base+path:path,{cache:'no-store',...options,signal:controller.signal});
+   let data={};try{data=await r.json()}catch(e){}
+   return {status:r.status,ok:r.ok,data};
+  }catch(e){lastError=e;if(attempt+1<attempts)await sleep(180)}
+  finally{clearTimeout(timer)}
+ }
+ throw lastError||new Error('Sin respuesta');
+}
+function fetchJson(path,options={},timeout=3000){return fetchJsonFrom(apiBase,path,options,timeout,2)}
+function fetchJsonAny(path,options={},timeout=3000){return fetchJsonAnyFrom(apiBase,path,options,timeout,1)}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function go(p){document.querySelectorAll('.page').forEach(x=>x.classList.add('hidden'));$('#page-'+p).classList.remove('hidden');document.querySelectorAll('.nav button[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===p));$('#pageTitle').textContent=titles[p]||'ATOM.ia';side.classList.remove('open')}
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));
@@ -106,16 +150,152 @@ function setName(n){userName=(n||'explorador').trim().slice(0,28)||'explorador';
 function newSession(){history=[];sessionStorage.removeItem('atomia_history');$('#messages').innerHTML='';$('#chatWelcome').style.display='block';localStorage.removeItem('atomia_name');userName='';$('#nameInput').value='';$('#nameModal').classList.remove('hidden');$('#nameInput').focus();go('home')}
 $('#resetSession').onclick=newSession;$('#saveName').onclick=()=>{setName($('#nameInput').value);$('#nameModal').classList.add('hidden');go('chat');if(!history.length){const saludo=`¡Hola, ${userName}! Soy ATOM.ia. Qué gusto tenerte por aquí. Puedes preguntarme sobre ATOM-ArchBot, arqueología, ciencia, tecnología o cualquier tema que quieras.`;addMsg('assistant',saludo,'ATOM.IA');history.push({role:'assistant',content:saludo});sessionStorage.setItem('atomia_history',JSON.stringify(history))}};$('#nameInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#saveName').click()});
 function addMsg(role,text,meta='',loading=false){$('#chatWelcome').style.display='none';const d=document.createElement('div');d.className='msg '+role;d.innerHTML=`<div class="avatar">${role==='user'?'TÚ':`<img src="data:image/png;base64,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" alt="A">`}</div><div class="bubble">${loading?'<span class="typing"><i></i><i></i><i></i></span>':esc(text)}${meta?`<div class="meta">${esc(meta)}</div>`:''}</div>`;$('#messages').appendChild(d);$('#messages').scrollTop=$('#messages').scrollHeight;return d}
-async function ask(text){go('chat');text=(text||$('#input').value).trim();if(!text)return;$('#input').value='';addMsg('user',text);history.push({role:'user',content:text});sessionStorage.setItem('atomia_history',JSON.stringify(history.slice(-12)));const load=addMsg('assistant','', '',true);try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,history:history.slice(-8),name:userName})});const d=await r.json();load.remove();const answer=d.answer||d.error||'No pude responder en este momento.';const meta=d.mode==='online'?'IA ONLINE · GROQ':'MODO LOCAL · ATOM.IA';addMsg('assistant',answer,meta);history.push({role:'assistant',content:answer});history=history.slice(-12);sessionStorage.setItem('atomia_history',JSON.stringify(history))}catch(e){load.remove();addMsg('assistant','No pude comunicarme con el servidor de ATOM.ia. La ESP32 puede estar reiniciándose o fuera de alcance.','CONEXIÓN LOCAL')}}
+const objectCatalog={
+ 1:{name:'SELLO CILÍNDRICO',info:'La ficha de referencia del equipo lo vincula a la cultura Mochica, en la costa norte del Perú. Se describe como una pieza usada para estampar diseños sobre arcilla húmeda y otros materiales. Puede aportar información sobre arte, religión, organización social y técnicas artesanales.'},
+ 2:{name:'PUNTA DE PROYECTIL',info:'La ficha de referencia del equipo la relaciona con Cueva Fell, Magallanes, y con grupos cazadores-recolectores. Este tipo de pieza puede aportar información sobre técnicas de caza, materiales utilizados, adaptación al entorno y movilidad de grupos humanos tempranos.'},
+ 3:{name:'MOÁI',info:'La ficha de referencia del equipo lo sitúa en Rano Raraku, Rapa Nui, asociado al pueblo Rapanui y tallado en toba volcánica. Los moáis se relacionan con antepasados, identidad comunitaria, organización social y prácticas ceremoniales.'},
+ 4:{name:'CABALLO LATTARA',info:'La ficha de referencia del equipo lo describe como una figurilla cerámica estilizada de Lattara, Francia, del Neolítico final. Podría aportar información sobre creencias simbólicas, prácticas rituales, desarrollo artístico y relación de esas comunidades con los animales.'},
+ 5:{name:'FIGURA HNEFATAFL BALDURSHEIMUR',info:'Esta categoría forma parte de las fichas internas de referencia entregadas por el equipo. ATOM.ia no completará datos históricos que no estén confirmados; una coincidencia visual siempre requiere revisión humana.'}
+};
+function saveHistory(){history=history.slice(-14);sessionStorage.setItem('atomia_history',JSON.stringify(history))}
+function systemChatMessage(text,meta){addMsg('assistant',text,meta);history.push({role:'assistant',content:text});saveHistory()}
+function announceRobotConnected(ip){
+ const text=`ATOM-ArchBot se conectó correctamente${ip?` desde ${ip}`:''}. Ya puedo recibir sus eventos y mostrar posibles hallazgos en tiempo real.`;
+ systemChatMessage(text,'ATOM-ARCHBOT · CONECTADO');
+ toast('ATOM-ArchBot conectado');
+}
+function announceDetection(a){
+ const id=Number(a.object_id||0), c=Number(a.confidence||0), ev=Number(a.event||0);
+ const item=objectCatalog[id]||{name:a.object||'OBJETO DE INTERÉS',info:'La detección corresponde a una coincidencia visual del sistema y debe ser revisada por una persona.'};
+ const text=`ATOM-ArchBot acaba de registrar un posible hallazgo: ${item.name}, con ${c}% de confianza visual.\n\n${item.info}\n\nImportante: esto no confirma que la pieza sea arqueológica ni autentica su origen; es una coincidencia visual que requiere revisión humana.`;
+ systemChatMessage(text,`ATOM-ARCHBOT · EVENTO ${ev}`);
+ toast(`Posible hallazgo: ${item.name} · ${c}%`);
+}
+async function waitChatJob(job,timeout=70000,jobBase=apiBase){
+ const start=Date.now();
+ let networkFailures=0,notFound=0;
+ while(Date.now()-start<timeout){
+  await sleep(850);
+  try{
+   const r=await fetchJsonAnyFrom(jobBase,'/api/chat/result?id='+encodeURIComponent(job),{},3200,1);
+   if(r.status===200)return r.data;
+   if(r.status===202){networkFailures=0;notFound=0;continue}
+   if(r.status===404){notFound++;if(notFound<3)continue}
+   throw new Error('Resultado IA '+r.status);
+  }catch(e){
+   networkFailures++;
+   if(networkFailures>=10)throw e;
+   await sleep(Math.min(350+networkFailures*150,1400));
+  }
+ }
+ throw new Error('Tiempo de espera agotado');
+}
+async function ask(text){
+ go('chat');text=(text||$('#input').value).trim();if(!text||chatBusy)return;
+ $('#input').value='';addMsg('user',text);history.push({role:'user',content:text});saveHistory();
+ const load=addMsg('assistant','', '',true);chatBusy=true;
+ try{
+  const jobBase=apiBase;
+  const requestId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+  const r=await fetchJsonAnyFrom(jobBase,'/api/chat',{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({message:text,history:history.slice(-6),name:userName,request_id:requestId})},6000,2);
+  let d=r.data;
+  if(r.status===202&&d.queued&&d.job)d=await waitChatJob(d.job,70000,jobBase);
+  else if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+  load.remove();const answer=d.answer||d.error||'No pude responder en este momento.';
+  const meta=d.mode==='online'?'IA ONLINE':(d.mode==='project'?'ATOM.IA · BASE DEL PROYECTO':'MODO LOCAL · ATOM.IA');
+  addMsg('assistant',answer,meta);history.push({role:'assistant',content:answer});saveHistory();
+ }catch(e){
+  load.remove();addMsg('assistant','No pude recuperar el resultado después de varios intentos. El servidor local seguirá reconectándose sin detener ATOM-ArchBot.','CONEXIÓN LOCAL');
+ }finally{chatBusy=false}
+}
 $('#form').onsubmit=e=>{e.preventDefault();ask()};
 function setDot(el,state){el.className='dot '+state}
-async function updateStatus(){try{const s=await fetch('/api/status',{cache:'no-store'}).then(r=>r.json());if(s.ai){$('#modePill').textContent='IA ONLINE · GROQ';$('#modePill').className='pill good';setDot($('#netDot'),'ok');$('#netText').textContent='Internet + Groq disponibles';$('#homeStatus').textContent='IA online lista'}else if(s.online){$('#modePill').textContent='INTERNET · IA LOCAL';$('#modePill').className='pill';setDot($('#netDot'),'warn');$('#netText').textContent='Internet conectado · Groq no disponible';$('#homeStatus').textContent='Modo local disponible'}else{$('#modePill').textContent='MODO LOCAL';$('#modePill').className='pill off';setDot($('#netDot'),'bad');$('#netText').textContent='Sin Internet · modo local activo';$('#homeStatus').textContent='Funcionamiento local'}}catch(e){$('#modePill').textContent='SERVIDOR LOCAL';$('#modePill').className='pill off';setDot($('#netDot'),'bad');$('#netText').textContent='Reintentando conexión con ESP32'}
- try{const a=await fetch('/api/archbot/status',{cache:'no-store'}).then(r=>r.json());const on=!!a.connected;$('#botPill').textContent=on?'ARCHBOT ONLINE':'ARCHBOT OFFLINE';$('#botPill').className='pill '+(on?'good':'off');setDot($('#botDot'),on?'ok':'bad');$('#botText').textContent=on?'ATOM-ArchBot conectado':'ATOM-ArchBot sin enlazar';$('#abConnected').textContent=on?'CONECTADO':'DESCONECTADO';$('#abState').textContent=a.state||'ESPERANDO';$('#abIp').textContent=a.ip||'—';$('#abEvent').textContent=a.event||0;$('#abObject').textContent=a.object||'NINGUNO';const c=Number(a.confidence||0);$('#abConfidence').textContent=c+'%';$('#ring').style.background=`conic-gradient(var(--wine) ${c*3.6}deg,#eadfd7 0deg)`;$('#abExplain').textContent=(a.event&&a.object&&a.object!=='NINGUNO')?`ATOM-ArchBot registró una coincidencia visual con ${c}% de confianza. Esto no confirma por sí solo que sea un hallazgo arqueológico.`:'Cuando ATOM-ArchBot confirme una coincidencia visual, aparecerá aquí automáticamente.';if(on&&a.event&&a.event!==lastEvent){if(lastEvent!==0)toast(`Nuevo posible hallazgo: ${a.object} · ${c}%`);lastEvent=a.event}}catch(e){}
+function renderArchbot(a){
+ const on=!!a.connected, seen=!!a.ever_seen, apClients=Number(a.ap_clients||0);
+ const waiting=!on&&!seen;
+ const linkedWifi=!on&&apClients>0;
+ $('#botPill').textContent=on?'ARCHBOT ONLINE':(waiting?'ESPERANDO MATRIX':'ARCHBOT OFFLINE');
+ $('#botPill').className='pill '+(on?'good':(waiting?'':'off'));
+ setDot($('#botDot'),on?'ok':(waiting?'warn':'bad'));
+ $('#botText').textContent=on?'ATOM-ArchBot conectado':(waiting?'Esperando MATRIX en ATOM-ARCHBOT':(linkedWifi?'MATRIX en Wi-Fi · sin heartbeat':'ATOM-ArchBot sin enlazar'));
+ $('#abConnected').textContent=on?'CONECTADO':(waiting?'ESPERANDO':'DESCONECTADO');
+ $('#abState').textContent=a.state||'ESPERANDO';$('#abIp').textContent=a.ip||'—';$('#abEvent').textContent=a.event||0;$('#abObject').textContent=a.object||'NINGUNO';
+ const c=Number(a.confidence||0);$('#abConfidence').textContent=c+'%';$('#ring').style.background=`conic-gradient(var(--wine) ${c*3.6}deg,#eadfd7 0deg)`;
+ $('#abExplain').textContent=(a.event&&a.object&&a.object!=='NINGUNO')?`ATOM-ArchBot registró una coincidencia visual con ${c}% de confianza. Esto no confirma por sí solo que sea un hallazgo arqueológico.`:'Cuando ATOM-ArchBot confirme una coincidencia visual, aparecerá aquí automáticamente.';
+
+ if(on&&!robotWasOnline){announceRobotConnected(a.ip||'');robotWasOnline=true;sessionStorage.setItem('atomia_robot_online','1')}
+ if(!on&&robotWasOnline){robotWasOnline=false;sessionStorage.setItem('atomia_robot_online','0')}
+ const ev=Number(a.event||0);
+ if(on&&ev&&ev!==lastEvent){announceDetection(a);lastEvent=ev;sessionStorage.setItem('atomia_last_event',String(ev))}
+}
+async function updateArchbot(){
+ if(archbotBusy)return;archbotBusy=true;
+ try{
+  const a=await fetchJson('/api/archbot/status',{},1800);archbotFailures=0;renderArchbot(a);
+ }catch(e){
+  archbotFailures++;
+  // Un fallo de la PAGINA no significa que el MATRIX se haya desconectado.
+  // Conservamos el ultimo estado durante varios intentos para evitar falsos OFFLINE.
+  if(archbotFailures===4){$('#abState').textContent='VERIFICANDO';}
+  if(archbotFailures>=12){$('#abState').textContent='SIN RESPUESTA WEB';}
+ }finally{archbotBusy=false}
+}
+async function updateStatus(){
+ if(statusBusy)return;
+ statusBusy=true;
+ try{
+  const s=await fetchJson('/api/status',{},2800);
+  statusFailures=0;
+
+  // Si el PC entra por ATOM-ARCHBOT, toda la sesion queda fija en 192.168.4.1.
+  // Desde la red principal usamos la IP preferida informada por la ESP32.
+  if(directAp||s.direct_access){
+    apiBase='';
+    sessionStorage.removeItem('atomia_sta_base');
+  }else if(s.preferred_ip){
+    const base='http://'+s.preferred_ip;
+    if(apiBase!==base){
+      apiBase=base;
+      sessionStorage.setItem('atomia_sta_base',base);
+    }
+  }
+  if(s.ai){
+    const busy=s.ai_state==='BUSY', limited=s.ai_state==='RATE_LIMIT';
+    $('#modePill').textContent=busy?'IA RESPONDIENDO':(limited?'IA EN ESPERA':'IA ONLINE');
+    $('#modePill').className='pill '+(limited?'':'good');
+    setDot($('#netDot'),limited?'warn':'ok');
+    $('#netText').textContent=busy?'Enlace directo + IA · respondiendo':(limited?'Enlace directo OK · límite temporal de IA':'Enlace directo + IA disponibles');
+    $('#homeStatus').textContent=limited?'IA online en espera':'IA online lista';
+  } else if(s.online){
+    $('#modePill').textContent=s.ai_state==='AUTH_ERROR'?'REVISAR API':'IA VERIFICANDO';$('#modePill').className='pill';
+    setDot($('#netDot'),'warn');$('#netText').textContent=s.ai_state==='AUTH_ERROR'?'Enlace directo OK · revisar API Key':'Enlace directo OK · validando IA online';$('#homeStatus').textContent='Conexión online en comprobación';
+  } else {
+    $('#modePill').textContent='MODO LOCAL';$('#modePill').className='pill';
+    setDot($('#netDot'),'warn');$('#netText').textContent='Enlace directo OK · Internet recuperándose';$('#homeStatus').textContent='Modo local activo';
+  }
+  if(window.console&&console.debug)console.debug('ATOM.ia status',{build:s.build,boot:s.boot_id,wifi:s.online,rssi:s.wifi_rssi,ai:s.ai,groq:s.groq_http,error:s.groq_error,heap:s.free_heap,minHeap:s.min_free_heap});
+  if(s.archbot_data)renderArchbot(s.archbot_data);
+ }catch(e){
+  statusFailures++;
+
+  // Si la ESP32 obtuvo una IP nueva por DHCP, la IP aprendida puede quedar vieja.
+  // Volvemos temporalmente al origen (atom-ia.local) para descubrir la nueva.
+  if(!directAp&&statusFailures===1&&apiBase){
+    apiBase='';
+    sessionStorage.removeItem('atomia_sta_base');
+  } else if(!directAp&&statusFailures===2&&!apiBase&&location.hostname!=='atom-ia.local'){
+    apiBase=mdnsBase;
+  }
+
+  if(statusFailures===1)$('#netText').textContent='Comprobando enlace con ESP32...';
+  if(statusFailures>=4){$('#modePill').textContent='RECONECTANDO';$('#modePill').className='pill off';setDot($('#netDot'),'bad');$('#netText').textContent='Recuperando enlace con ESP32...'}
+ }finally{statusBusy=false}
 }
 function toast(t){const x=document.createElement('div');x.className='toast';x.textContent=t;document.body.appendChild(x);setTimeout(()=>x.remove(),3300)}
 if(userName){setName(userName);if(history.length){history.forEach(m=>{if(m&&['user','assistant'].includes(m.role)&&m.content)addMsg(m.role,m.content,m.role==='assistant'?'HISTORIAL DE SESIÓN':'')})}}else setTimeout(()=>{$('#nameModal').classList.remove('hidden');$('#nameInput').focus()},220);
-setInterval(updateStatus,1500);updateStatus();
+setInterval(updateArchbot,1800);setInterval(updateStatus,5500);updateStatus();setTimeout(updateArchbot,250);
 document.addEventListener('keydown',e=>{const altGr=e.key==='AltGraph'||(e.code==='AltRight'&&e.ctrlKey&&e.altKey);if(altGr){e.preventDefault();newSession()}});
 </script>
 </body></html>
+
 )ATOMHTML";
