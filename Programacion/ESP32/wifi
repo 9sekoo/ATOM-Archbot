@@ -1,0 +1,2 @@
+const char* WIFI_SSID = "Xiaomi 15T";
+const char* WIFI_PASS = "200600620";
