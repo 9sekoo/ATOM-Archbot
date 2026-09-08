@@ -1,262 +1,412 @@
-# ⚙️ Funcionamiento de ATOM ArchBot
+# ⚙️ Funcionamiento de ATOM ArchBot V3
 
-Este documento describe la **lógica de funcionamiento propuesta** para **ATOM ArchBot**, desde su encendido hasta la finalización del proceso de harneado.
+Este documento describe de forma detallada el funcionamiento de **ATOM ArchBot V3**, un sistema robótico desarrollado para apoyar el proceso de harneado arqueológico mediante automatización, sensores de distancia, visión artificial, control electrónico y sistemas de seguridad.
+
+El controlador principal del robot es el **MATRIX Mini R4**, encargado de coordinar los sensores, actuadores, interfaces de usuario y comunicaciones del sistema.
+
+ATOM ArchBot no busca reemplazar el trabajo de un arqueólogo.
+
+Su función es actuar como una herramienta tecnológica de apoyo capaz de:
+
+- Automatizar el movimiento del harnero.
+- Medir aproximadamente la cantidad de material presente.
+- Adaptar el movimiento del harnero.
+- Detectar visualmente posibles objetos de interés.
+- Detener automáticamente el proceso cuando sea necesario.
+- Controlar la entrada y salida de la bandeja.
+- Evitar determinadas acciones inseguras.
+- Informar constantemente al usuario sobre el estado del sistema.
+- Generar alertas visuales y sonoras.
+- Comunicar eventos importantes al sistema ATOM.IA.
+- Facilitar pruebas, diagnóstico y demostraciones del prototipo.
 
 > [!IMPORTANT]
-> El funcionamiento descrito en este documento corresponde a una **propuesta de diseño y programación**.
+> ATOM ArchBot identifica **posibles hallazgos**.
 >
-> Durante la integración y programación real de ATOM ArchBot, algunos comportamientos, tiempos, velocidades, estados o secuencias pueden ser modificados según los resultados obtenidos en las pruebas del prototipo.
+> La clasificación definitiva de un objeto como pieza arqueológica debe ser realizada por una persona capacitada.
 
 ---
 
-# 🏺 ¿Qué hace ATOM ArchBot?
+# 🏺 Objetivo general
 
-**ATOM ArchBot** es un sistema robótico diseñado para apoyar el proceso de **harneado arqueológico**.
+El harneado es una etapa importante durante determinados trabajos arqueológicos.
 
-Su funcionamiento combina:
+Normalmente el material se deposita sobre una malla y posteriormente se mueve para separar la tierra de elementos de mayor tamaño.
 
-* 🤖 Movimiento automatizado del harnero.
-* 📏 Medición de material mediante sensores láser.
-* 📷 Visión artificial mediante la M-Vision Cam.
-* 🧠 Procesamiento mediante el MATRIX Mini R4.
-* ⚙️ Movimiento automatizado de la bandeja.
-* 🖥️ Información mediante pantallas.
-* 🌈 Alertas visuales RGB.
-* 🔊 Alertas mediante buzzer.
-* 🛑 Sistemas de seguridad y autodiagnóstico.
+ATOM ArchBot busca apoyar este proceso utilizando robótica.
 
-La idea principal es que el robot pueda **adaptar el movimiento del harnero dependiendo de la cantidad de material existente y reaccionar ante la detección de un posible objeto arqueológico**.
-
----
-
-# 🔄 Flujo general de funcionamiento
+La idea principal del sistema es:
 
 ```text
-┌───────────────────────────┐
-│      ENCENDER ATOM        │
-└─────────────┬─────────────┘
-              │
-              ▼
-┌───────────────────────────┐
-│      INICIALIZACIÓN       │
-│                           │
-│ • MATRIX Mini R4          │
-│ • M-Vision Cam            │
-│ • Sensores láser          │
-│ • Servomotores            │
-│ • Motores DC              │
-│ • Pantallas               │
-│ • RGB                     │
-│ • Final de carrera        │
-└─────────────┬─────────────┘
-              │
-              ▼
-┌───────────────────────────┐
-│      AUTODIAGNÓSTICO      │
-└─────────────┬─────────────┘
-              │
-              ▼
-        ¿TODO CORRECTO?
-           /       \
-         NO         SÍ
-         │           │
-         ▼           ▼
-┌──────────────┐  ┌─────────────────┐
-│    ERROR     │  │      LISTO      │
-│              │  │                 │
-│ No comenzar  │  │ Esperar inicio  │
-└──────────────┘  └────────┬────────┘
-                           │
-                           ▼
-                  Pulsador INICIAR
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │    HARNEANDO    │
-                  └────────┬────────┘
-                           │
-              ┌────────────┴────────────┐
-              │                         │
-              ▼                         ▼
-      Sensores láser             M-Vision Cam
-      miden material             analiza imagen
-              │                         │
-              ▼                         ▼
-      Ajustar velocidad         Buscar posible
-       de los servos              hallazgo
-              │                         │
-              └────────────┬────────────┘
-                           │
-                           ▼
-                  ¿HAY HALLAZGO?
-                     /       \
-                   SÍ         NO
-                   │           │
-                   ▼           │
-            ┌──────────────┐   │
-            │   HALLAZGO   │   │
-            │              │   │
-            │ Detener      │   │
-            │ harnero      │   │
-            │ RGB + buzzer │   │
-            └──────────────┘   │
-                               │
-                               ▼
-                       Continuar proceso
-                               │
-                               ▼
-                      ¿HARNEADO TERMINÓ?
-                          /        \
-                        NO          SÍ
-                        │            │
-                        └──────┐     ▼
-                               │ ┌──────────────┐
-                               └▶│ FINALIZADO   │
-                                 └──────────────┘
+MEDIR
+   ↓
+ANALIZAR
+   ↓
+ADAPTAR
+   ↓
+HARNEAR
+   ↓
+OBSERVAR
+   ↓
+DETECTAR
+   ↓
+PROTEGER
+```
+
+El robot intenta que el proceso sea más:
+
+```text
+Controlado
+Adaptable
+Repetible
+Observable
+Seguro
+Interactivo
 ```
 
 ---
 
-# 🚀 1. Encendido
+# 🧠 Cerebro del sistema
 
-El funcionamiento comienza cuando el usuario activa el **interruptor general de ATOM ArchBot**.
+El controlador principal es el:
+
+## MATRIX Mini R4
+
+El MATRIX Mini R4 actúa como el centro de coordinación de ATOM ArchBot.
+
+Recibe información desde:
 
 ```text
-Interruptor
-    ↓
-Alimentación
-    ↓
+Sensores ToF
+Pulsadores
+Final de carrera
+M-Vision Cam
+Botones integrados
+```
+
+Y controla:
+
+```text
+Servomotores
+Motores DC
+LCD 16×2
+LCD 16×4
+OLED
+Buzzer
+RGB izquierdo
+RGB derecho
+```
+
+De forma simplificada:
+
+```text
+                    ENTRADAS
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+      ToF         M-Vision       Pulsadores
+        │              │              │
+        └──────────────┼──────────────┘
+                       ▼
+              ┌─────────────────┐
+              │ MATRIX MINI R4  │
+              └────────┬────────┘
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+      Servos         Motores       Pantallas
+        │              │              │
+        ├──────────────┼──────────────┤
+        │              │              │
+       RGB           Buzzer        ATOM.IA
+```
+
+---
+
+# 🔄 Funcionamiento general
+
+El funcionamiento normal puede resumirse mediante esta secuencia:
+
+```text
+┌─────────────────────┐
+│      ENCENDIDO      │
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│   INICIALIZACIÓN    │
+└──────────┬──────────┘
+           ▼
+┌─────────────────────┐
+│ COMPROBACIÓN SISTEMA│
+└──────────┬──────────┘
+           ▼
+       ¿TODO OK?
+        /      \
+      NO        SÍ
+      │          │
+      ▼          ▼
+┌──────────┐ ┌──────────┐
+│  ERROR   │ │  LISTO   │
+└──────────┘ └────┬─────┘
+                  │
+            Pulsador 1
+                  │
+                  ▼
+          ┌──────────────┐
+          │  HARNEANDO   │
+          └──────┬───────┘
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+   Sensores ToF       M-Vision
+        │                 │
+        ▼                 ▼
+ Medir material       Analizar
+        │                 │
+        ▼                 ▼
+ Ajustar velocidad   Buscar objeto
+        │                 │
+        └────────┬────────┘
+                 ▼
+          ¿HAY HALLAZGO?
+             /      \
+           SÍ        NO
+           │          │
+           ▼          └───────┐
+     ┌────────────┐           │
+     │ HALLAZGO   │           │
+     └─────┬──────┘           │
+           │                  │
+           ▼                  │
+      Detener harnero         │
+      Alertar usuario         │
+      Informar ATOM.IA        │
+           │                  │
+           └──────────────────┘
+```
+
+---
+
+# 🚀 1. Encendido del robot
+
+El funcionamiento comienza cuando se activa el interruptor general.
+
+La energía sigue aproximadamente la siguiente ruta:
+
+```text
+Pack de baterías
+       ↓
+     BMS 2S
+       ↓
+Interruptor general
+       ↓
+ Jack DC
+       ↓
 MATRIX Mini R4
-    ↓
-Inicio del sistema
 ```
 
-Una vez energizado, el MATRIX Mini R4 comienza la secuencia de inicialización.
-
-Como señal de encendido se podrá utilizar:
-
-* 🔊 Melodía de inicio mediante el buzzer.
-* 🌈 Animación breve de las luces RGB.
-* 🖥️ Mensaje de inicio en las pantallas.
-* ⚙️ Posicionamiento inicial de los actuadores.
-
-Ejemplo:
-
-```text
-┌────────────────┐
-│   ATOM ARCHBOT │
-│   INICIANDO... │
-└────────────────┘
-```
+Una vez energizado el controlador, comienza automáticamente la secuencia de inicio.
 
 ---
 
-# 🧠 2. Inicialización del sistema
+# ✨ 2. Secuencia visual de inicio
 
-Antes de permitir el harneado, ATOM debe preparar sus principales subsistemas.
+El robot utiliza sus diferentes interfaces para indicar que ha comenzado correctamente.
 
-Durante esta etapa se inicializan:
+Durante los primeros segundos pueden utilizarse:
+
+```text
+OLED
+LCD 16×2
+LCD 16×4
+RGB
+Buzzer
+```
+
+La OLED puede comenzar mostrando:
+
+```text
+ATOM-ArchBot
+```
+
+Posteriormente puede aparecer el logo del equipo:
+
+```text
+LOS HARNERITOS
+```
+
+Mientras tanto el LCD principal puede mostrar:
+
+```text
+Hola mundo,
+soy ATOM-ArchBot
+```
+
+y posteriormente:
+
+```text
+Conectando a
+ATOM.IA
+```
+
+Si la conexión correspondiente se establece:
+
+```text
+ATOM.IA
+Conectado
+```
+
+Finalmente el robot pasa a su pantalla de espera.
+
+---
+
+# 🧠 3. Inicialización de componentes
+
+Antes de mover cualquier mecanismo, el programa configura los diferentes componentes.
+
+La inicialización incluye:
 
 ```text
 MATRIX Mini R4
-      │
-      ├── M-Vision Cam
-      ├── Sensor láser izquierdo
-      ├── Sensor láser derecho
-      ├── Servo izquierdo
-      ├── Servo derecho
-      ├── Motores DC
-      ├── LCD 16x2
-      ├── LCD 16x4
-      ├── OLED integrada
-      ├── RGB izquierdo
-      ├── RGB derecho
-      └── Final de carrera
+│
+├── M-Vision Cam
+│
+├── ToF izquierdo
+│
+├── ToF derecho
+│
+├── Servo izquierdo
+│
+├── Servo derecho
+│
+├── Motor DC izquierdo
+│
+├── Motor DC derecho
+│
+├── Pulsadores
+│
+├── Final de carrera
+│
+├── LCD 16×2
+│
+├── LCD 16×4
+│
+├── OLED
+│
+├── RGB izquierdo
+│
+├── RGB derecho
+│
+└── Buzzer
 ```
 
-Los servomotores se llevan a una posición inicial conocida.
-
-```text
-Servo izquierdo → 0°
-Servo derecho   → 0°
-```
-
-Esto permite comenzar cada ciclo desde una posición controlada.
+El objetivo es que todos los sistemas comiencen desde un estado conocido.
 
 ---
 
-# 🩺 3. Autodiagnóstico
+# 🦾 4. Posición inicial de los servomotores
 
-Una vez inicializados los componentes, el sistema realiza un **autodiagnóstico básico** antes de permitir el inicio del harneado.
+Los dos servomotores encargados del movimiento del harnero deben comenzar desde una posición de referencia.
 
-El objetivo es detectar posibles fallos antes de mover el mecanismo.
+No es obligatorio que esta posición corresponda exactamente a `0°`.
 
-El sistema podrá comprobar:
+La posición inicial puede ser calibrada posteriormente según la geometría definitiva del mecanismo.
 
-| Componente             | Comprobación propuesta  |
-| ---------------------- | ----------------------- |
-| M-Vision Cam           | Comunicación disponible |
-| Sensor láser izquierdo | Lectura válida          |
-| Sensor láser derecho   | Lectura válida          |
-| Servomotores           | Posición inicial        |
-| Pantallas              | Inicialización correcta |
-| Final de carrera       | Estado lógico           |
-| RGB                    | Inicialización          |
-| Sistemas principales   | Comunicación y estado   |
-
----
-
-## ✅ Diagnóstico correcto
-
-Si los componentes principales responden correctamente:
+Conceptualmente:
 
 ```text
-AUTODIAGNÓSTICO
-       ↓
-     TODO OK
-       ↓
-      LISTO
+ENCENDIDO
+   ↓
+Mover servos
+   ↓
+POSICIÓN INICIAL
+   ↓
+Detener movimiento
 ```
 
-El sistema queda preparado para iniciar.
+Esto evita que un servo permanezca en una posición desconocida después de iniciar el robot.
+
+También permite que después de determinadas acciones los servos puedan regresar nuevamente a una posición segura.
 
 ---
 
-## ❌ Error detectado
+# 🩺 5. Comprobación del sistema
 
-Si se detecta un problema:
+ATOM ArchBot puede realizar comprobaciones antes de permitir el movimiento principal.
+
+Estas comprobaciones buscan detectar problemas evidentes.
+
+Por ejemplo:
+
+| Sistema | Comprobación |
+|---|---|
+| M-Vision | Comunicación disponible |
+| ToF izquierdo | Lectura válida |
+| ToF derecho | Lectura válida |
+| LCD | Inicialización |
+| RGB | Inicialización |
+| Final de carrera | Estado lógico |
+| Pulsadores | Lectura de entradas |
+| ATOM.IA | Estado de comunicación |
+| Sistema general | Estado correcto |
+
+Si los sistemas necesarios están disponibles:
 
 ```text
-AUTODIAGNÓSTICO
-       ↓
+COMPROBACIÓN
+     ↓
+   TODO OK
+     ↓
+    LISTO
+```
+
+Si existe un problema importante:
+
+```text
+COMPROBACIÓN
+     ↓
     ERROR
-       ↓
-NO INICIAR HARNEADO
+     ↓
+BLOQUEAR ACCIÓN
 ```
 
-La pantalla puede indicar específicamente el componente afectado.
+---
+
+# ⚠️ 6. Estado ERROR
+
+El estado `ERROR` busca evitar que el robot realice una acción cuando existe una condición que podría producir un comportamiento incorrecto.
+
+Al entrar en error:
+
+```text
+Servos        → detener
+Motores DC    → detener
+RGB           → indicar error
+Buzzer        → alerta
+Pantallas     → mostrar causa
+```
 
 Ejemplo:
 
 ```text
-ERROR SISTEMA
-CAMARA NO DETECTADA
+ERROR
+SIN BANDEJA
 ```
 
 o:
 
 ```text
-ERROR SISTEMA
-LASER IZQ.
+ERROR
+SENSOR
 ```
 
-El sistema deberá permanecer detenido hasta solucionar el problema o reiniciar el robot.
+El objetivo es indicar no solamente que existe un problema, sino también ayudar a localizarlo.
 
 ---
 
-# ✅ 4. Estado LISTO
+# ✅ 7. Estado LISTO
 
-Cuando la inicialización y el autodiagnóstico terminan correctamente, ATOM pasa al estado:
+Cuando la inicialización finaliza, ATOM ArchBot entra en:
 
 ```text
 LISTO
@@ -264,221 +414,738 @@ LISTO
 
 En este estado:
 
-* Los servomotores permanecen detenidos.
-* Los motores de la bandeja permanecen detenidos.
-* La cámara puede permanecer preparada.
-* Los sensores se encuentran disponibles.
-* Las pantallas informan que el sistema puede comenzar.
-* El robot espera una acción del usuario.
-
-La pantalla principal podría mostrar:
-
 ```text
-┌────────────────┐
-│ ATOM LISTO     │
-│ ¿INICIAR?      │
-└────────────────┘
+Servos       → detenidos
+Motores DC   → detenidos
+Sensores     → disponibles
+M-Vision     → preparada
+Pantallas    → activas
+Pulsadores   → activos
+RGB          → estado de espera
 ```
 
-El usuario inicia el proceso mediante el:
+La pantalla principal puede indicar:
 
-### 🔘 Pulsador 1 — INICIAR
+```text
+Comenzar a
+harnear
+```
+
+ATOM permanece esperando la orden del usuario.
 
 ---
 
-# ⚙️ 5. Inicio del harneado
+# 🔘 8. Controles físicos
 
-Al presionar el botón de inicio:
+ATOM ArchBot utiliza cuatro pulsadores externos.
+
+| Pulsador | Función principal |
+|---|---|
+| Pulsador 1 | Iniciar harneado |
+| Pulsador 2 | Pausar / continuar |
+| Pulsador 3 | Sacar bandeja |
+| Pulsador 4 | Insertar bandeja |
+
+Al detectar correctamente una pulsación, el buzzer puede reproducir un sonido corto de confirmación.
+
+Esto permite al operador saber que el comando fue recibido.
+
+---
+
+# ⚙️ 9. Inicio del harneado
+
+El proceso comienza mediante:
+
+```text
+PULSADOR 1
+```
+
+La secuencia es:
 
 ```text
 Pulsador 1
     ↓
-MATRIX Mini R4
+MATRIX recibe comando
     ↓
-Estado HARNEANDO
+Comprobar condiciones
+    ↓
+¿Es seguro comenzar?
+    ↓
+    SÍ
+    ↓
+HARNEANDO
 ```
 
-Los dos servomotores comienzan a realizar el movimiento oscilante necesario para mover el harnero.
+Antes de comenzar se pueden revisar condiciones como:
 
 ```text
-Servo izquierdo  ↔
-                   HARNEO
-Servo derecho    ↔
+Bandeja presente
+Sensores disponibles
+Sin error crítico
+Sistema preparado
 ```
 
-Los dos actuadores deberán trabajar de forma coordinada para mantener un movimiento estable.
+Si alguna condición necesaria no se cumple, el movimiento no comienza.
 
 ---
 
-# 📏 6. Medición del material
+# 🛡️ 10. Protección: no harnear sin bandeja
 
-Mientras ATOM está harneando, los **dos sensores láser** realizan mediciones sobre el contenido presente en el harnero.
+Una de las reglas de seguridad de ATOM es evitar iniciar el proceso si la bandeja no se encuentra correctamente dentro del sistema.
+
+La lógica es:
 
 ```text
-       SENSOR IZQ.        SENSOR DER.
-            ↓                  ↓
-        ┌─────────────────────────┐
-        │        MATERIAL         │
-        │       DEL HARNERO       │
-        └─────────────────────────┘
+Usuario pulsa INICIAR
+        ↓
+¿Bandeja insertada?
+     /       \
+   NO         SÍ
+   │           │
+   ▼           ▼
+BLOQUEAR    HARNEAR
 ```
 
-Estas mediciones permiten obtener información aproximada sobre la distancia entre los sensores y el material.
+Esto ayuda a evitar que el material pase a través del harnero sin una bandeja preparada para recibirlo.
 
 ---
 
-# 🧠 7. Control adaptativo del movimiento
+# 🦾 11. Movimiento del harnero
 
-Uno de los objetivos del sistema es que la velocidad del harnero **no sea siempre la misma**.
-
-ATOM podrá modificar la intensidad o velocidad del movimiento dependiendo de las lecturas obtenidas.
-
-La lógica propuesta es:
+El movimiento se genera mediante dos servomotores.
 
 ```text
-MUCHA TIERRA
-     ↓
-Material más cerca de los sensores
-     ↓
-Mayor velocidad de harneado
+Servo izquierdo
+       ↘
+        HARNERO
+       ↗
+Servo derecho
 ```
+
+Los servos trabajan de forma coordinada.
+
+El objetivo no es simplemente mover ambos servos de forma independiente, sino producir un movimiento estable y repetitivo en el harnero.
+
+Los movimientos pueden alternarse para generar una oscilación.
+
+Conceptualmente:
+
+```text
+Servo IZQ. → movimiento A
+Servo DER. → movimiento B
+
+          ↓
+
+Servo IZQ. → movimiento B
+Servo DER. → movimiento A
+```
+
+Esta alternancia genera el movimiento de harneado.
+
+---
+
+# ⚡ 12. Niveles de velocidad
+
+ATOM puede utilizar diferentes niveles de movimiento.
+
+Por ejemplo:
+
+```text
+Nivel 0 → detenido
+Nivel 1 → lento
+Nivel 2 → medio
+Nivel 3 → rápido
+```
+
+El nivel seleccionado depende principalmente de la cantidad aproximada de material detectada.
+
+La velocidad no tiene que permanecer fija durante todo el proceso.
+
+---
+
+# 📏 13. Sensores ToF
+
+ATOM ArchBot utiliza dos sensores láser de distancia tipo ToF.
+
+```text
+ToF izquierdo          ToF derecho
+      ↓                     ↓
+      └────── HARNERO ──────┘
+```
+
+Cada sensor mide la distancia existente entre él y la superficie que tiene debajo.
+
+Si existe bastante material:
+
+```text
+Sensor
+  ↓
+████████ tierra
+```
+
+la distancia medida será menor.
+
+Si existe poco material:
+
+```text
+Sensor
+  ↓
+
+
+██ poca tierra
+```
+
+la distancia será mayor.
+
+De esta forma es posible estimar aproximadamente la cantidad de material restante.
+
+---
+
+# 📐 14. Uso combinado de los dos sensores
+
+No se depende únicamente de una medición.
+
+El robot dispone de:
+
+```text
+Distancia izquierda
++
+Distancia derecha
+```
+
+Esto ayuda a conocer mejor la distribución del material.
+
+Por ejemplo:
+
+```text
+IZQ.: mucha tierra
+DER.: poca tierra
+```
+
+indicaría una distribución irregular.
 
 Mientras que:
 
 ```text
-POCA TIERRA
-     ↓
-Material más lejos de los sensores
-     ↓
-Menor velocidad de harneado
+IZQ.: mucha tierra
+DER.: mucha tierra
 ```
 
-Esto busca conseguir un proceso más controlado y reducir movimientos innecesariamente fuertes cuando quede poco material.
+indicaría una mayor cantidad general de material.
+
+Los valores exactos deben calibrarse experimentalmente.
 
 ---
 
-## ⚡ Ejemplo conceptual
+# 🧠 15. Clasificación de cantidad de tierra
 
-| Situación           | Lectura aproximada   | Movimiento      |
-| ------------------- | -------------------- | --------------- |
-| Mucho material      | Distancia pequeña    | Más rápido      |
-| Material intermedio | Distancia media      | Velocidad media |
-| Poco material       | Distancia mayor      | Más lento       |
-| Posible hallazgo    | Detectado por visión | Detener         |
-
-> Los valores exactos de distancia, velocidad y ángulos se determinarán experimentalmente durante las pruebas del robot.
-
----
-
-# 📷 8. Visión artificial
-
-Mientras se realiza el harneado, la **M-Vision Cam** observa el interior del sistema.
+A partir de las mediciones se puede establecer un estado aproximado:
 
 ```text
-Harnero
-   ↓
-M-Vision Cam
-   ↓
-Procesamiento de imagen
-   ↓
-Análisis
+SIN TIERRA
+BAJA
+MEDIA
+ALTA
 ```
 
-La cámara puede utilizar características como:
-
-* Color.
-* Forma.
-* Tamaño.
-* Área.
-* Cantidad de píxeles.
-* Densidad.
-* Posición dentro de la imagen.
-* Persistencia durante varios fotogramas.
-
-El objetivo no es reaccionar inmediatamente ante cualquier color extraño, sino utilizar diferentes filtros para reducir falsos positivos.
-
----
-
-# 🔍 9. Detección de un posible hallazgo
-
-Cuando la cámara encuentra un objeto que cumple con los criterios definidos, el sistema puede realizar una comprobación durante varios fotogramas.
-
-```text
-OBJETO DETECTADO
-       ↓
-¿APARECE DURANTE VARIOS FRAMES?
-       ↓
-      SÍ
-       ↓
-POSIBLE HALLAZGO
-```
-
-Esto permite evitar que pequeñas sombras, movimientos de tierra o reflejos generen una alerta inmediatamente.
-
----
-
-# 🏺 10. Estado HALLAZGO
-
-Cuando se confirma un posible objeto de interés:
-
-```text
-M-Vision Cam
-      ↓
-Posible objeto detectado
-      ↓
-MATRIX Mini R4
-```
-
-ATOM pasa al estado:
-
-```text
-HALLAZGO
-```
-
-En este estado se propone realizar automáticamente:
-
-### 🛑 Detención del harnero
-
-```text
-Servo izquierdo → 0°
-Servo derecho   → 0°
-```
-
-### 🌈 Alerta visual
-
-Las luces RGB comienzan una animación o parpadeo de advertencia.
-
-```text
-RGB IZQUIERDO  ✨ ✨ ✨
-RGB DERECHO    ✨ ✨ ✨
-```
-
-### 🔊 Alerta sonora
-
-El buzzer reproduce la melodía correspondiente a un hallazgo.
-
-### 🖥️ Aviso en pantalla
+Esta información puede mostrarse directamente en el LCD 16×4.
 
 Ejemplo:
 
 ```text
-┌────────────────┐
-│ POSIBLE        │
-│ HALLAZGO       │
-└────────────────┘
+Tierra: Alta
 ```
 
-El objetivo es que una persona pueda revisar físicamente el objeto antes de continuar el proceso.
+La clasificación no pretende medir masa en gramos.
+
+Los ToF miden **distancia**, y el software interpreta estas mediciones para estimar el nivel de material.
 
 ---
 
-# ⏸️ 11. Pausa y continuación
+# ⚡ 16. Control adaptativo
 
-Durante el funcionamiento, el usuario puede utilizar:
+Uno de los elementos principales de ATOM ArchBot es el control adaptativo del harneado.
 
-### 🔘 Pulsador 2 — PAUSA / CONTINUAR
+La lógica general es:
 
-Al presionarlo durante el harneado:
+```text
+MÁS TIERRA
+    ↓
+Mayor intensidad
+del movimiento
+```
+
+y:
+
+```text
+MENOS TIERRA
+    ↓
+Movimiento más
+controlado
+```
+
+Esto permite evitar mantener continuamente el sistema a máxima velocidad.
+
+La idea es:
+
+```text
+ALTA  → rápido
+MEDIA → medio
+BAJA  → lento
+VACÍO → detener / finalizar
+```
+
+Los parámetros reales se ajustan durante las pruebas.
+
+---
+
+# 📊 17. Filtrado de las mediciones
+
+Los sensores pueden presentar pequeñas variaciones entre una lectura y otra debido a:
+
+```text
+Movimiento de tierra
+Vibraciones
+Ángulo
+Superficie irregular
+Interferencia
+```
+
+Por esta razón, el programa puede utilizar varias mediciones antes de cambiar inmediatamente de estado.
+
+La idea es evitar situaciones como:
+
+```text
+ALTA
+MEDIA
+ALTA
+MEDIA
+ALTA
+```
+
+en unos pocos milisegundos.
+
+En cambio se busca obtener una transición estable.
+
+---
+
+# 📷 18. Visión artificial
+
+Mientras ATOM está funcionando, la **M-Vision Cam** observa la zona del harnero.
+
+La secuencia general es:
+
+```text
+HARNERO
+   ↓
+M-VISION
+   ↓
+Captura
+   ↓
+Procesamiento
+   ↓
+Clasificación
+   ↓
+Resultado
+   ↓
+MATRIX Mini R4
+```
+
+La cámara busca posibles objetos previamente configurados en el sistema.
+
+---
+
+# 👁️ 19. Qué analiza la visión
+
+Dependiendo del modelo entrenado y de la configuración utilizada, la cámara puede analizar características visuales de los objetos.
+
+El objetivo es diferenciar un objeto de interés de:
+
+```text
+Tierra
+Sombras
+Reflejos
+Movimiento
+Partículas
+Elementos no relevantes
+```
+
+ATOM no debe detener el robot simplemente porque aparece un píxel o color diferente.
+
+Por eso se utilizan filtros de confirmación.
+
+---
+
+# 🎯 20. Confianza de detección
+
+La cámara puede entregar un porcentaje de confianza asociado al objeto detectado.
+
+Ejemplo:
+
+```text
+Objeto: Punta
+Confianza: 83 %
+```
+
+Una detección de baja confianza puede ser ignorada.
+
+En la configuración base de pruebas se ha trabajado con un umbral cercano al:
+
+```text
+70 %
+```
+
+Esto significa que una detección debe superar el valor definido para poder avanzar hacia una posible confirmación.
+
+> [!NOTE]
+> Este porcentaje puede modificarse durante la calibración.
+
+---
+
+# 🎞️ 21. Confirmación durante varios fotogramas
+
+Una única detección no necesariamente significa que exista un objeto real.
+
+El sistema puede comprobar si el mismo objeto aparece durante varios fotogramas consecutivos.
+
+```text
+FRAME 1 → detectado
+FRAME 2 → detectado
+FRAME 3 → detectado
+FRAME 4 → detectado
+...
+        ↓
+CONFIRMACIÓN
+```
+
+Esto reduce alertas provocadas por:
+
+```text
+Sombras
+Movimiento rápido
+Reflejos
+Tierra pasando
+Errores puntuales
+```
+
+En las pruebas del sistema se ha trabajado con confirmación durante varios frames antes de generar un evento.
+
+---
+
+# 🔁 22. Evitar detecciones repetidas
+
+Después de confirmar un objeto, el sistema debe evitar enviar la misma detección cientos de veces mientras el objeto continúa frente a la cámara.
+
+Conceptualmente:
+
+```text
+OBJETO APARECE
+      ↓
+CONFIRMAR
+      ↓
+ENVIAR EVENTO
+      ↓
+BLOQUEAR REPETICIÓN
+      ↓
+OBJETO DESAPARECE
+      ↓
+REARMAR DETECCIÓN
+```
+
+Esta lógica permite registrar un hallazgo una sola vez hasta que el sistema se encuentre preparado para detectar nuevamente.
+
+---
+
+# 🏺 23. Posible hallazgo
+
+Cuando la detección supera los criterios definidos, ATOM considera que existe un:
+
+```text
+POSIBLE HALLAZGO
+```
+
+No significa que el robot determine científicamente que el objeto sea arqueológico.
+
+Significa que la visión ha encontrado un elemento suficientemente similar a uno de los objetos configurados.
+
+---
+
+# 🛑 24. Estado HALLAZGO
+
+Cuando se confirma el posible hallazgo:
+
+```text
+M-Vision
+   ↓
+Objeto confirmado
+   ↓
+MATRIX Mini R4
+   ↓
+HALLAZGO
+```
+
+ATOM puede ejecutar varias acciones simultáneamente.
+
+---
+
+## Detener movimiento
+
+Los servos dejan de harnear.
+
+```text
+Servo izquierdo → detener
+Servo derecho   → detener
+```
+
+Posteriormente pueden regresar de forma controlada a su posición de referencia.
+
+---
+
+## Activar luces
+
+Las barras RGB pueden utilizar una animación especial.
+
+```text
+RGB izquierdo
++
+RGB derecho
+      ↓
+ALERTA VISUAL
+```
+
+Esto permite que incluso una persona que no esté mirando directamente las pantallas pueda notar el evento.
+
+---
+
+## Activar sonido
+
+El buzzer reproduce un sonido diferente al de una pulsación normal.
+
+El objetivo es diferenciar claramente:
+
+```text
+Confirmación de botón
+≠
+Hallazgo
+≠
+Error
+≠
+Inicio
+```
+
+---
+
+## Mostrar datos
+
+Las pantallas pueden mostrar:
+
+```text
+POSIBLE HALLAZGO
+```
+
+además de información como:
+
+```text
+Objeto
+Confianza
+ID
+Estado de envío
+```
+
+---
+
+# 🧠 25. Comunicación con ATOM.IA
+
+ATOM ArchBot puede comunicar determinados eventos al sistema complementario **ATOM.IA**.
+
+La arquitectura general es:
+
+```text
+M-Vision
+   ↓
+MATRIX Mini R4
+   ↓
+Evento
+   ↓
+ATOM.IA
+```
+
+Cuando existe una detección se pueden enviar datos como:
+
+```text
+Tipo de objeto
+ID
+Confianza
+Estado
+Momento de detección
+```
+
+ATOM.IA puede utilizar esta información para mostrar el evento en su interfaz.
+
+---
+
+# 📡 26. Estado de comunicación
+
+El sistema puede indicar si ATOM.IA se encuentra disponible.
+
+Ejemplo:
+
+```text
+IA: Conectado
+```
+
+o:
+
+```text
+IA: Desconectado
+```
+
+Es importante que una falla de comunicación con la interfaz no produzca movimientos mecánicos inesperados.
+
+El robot debe priorizar siempre el control local y la seguridad.
+
+---
+
+# 🖥️ 27. LCD 16×2
+
+El LCD 16×2 funciona principalmente como interfaz de interacción directa con el usuario.
+
+Puede mostrar mensajes como:
+
+```text
+Hola mundo,
+soy ATOM-ArchBot
+```
+
+```text
+Conectando a
+ATOM.IA
+```
+
+```text
+Conectado
+```
+
+```text
+Comenzar a
+harnear
+```
+
+```text
+Modo
+Exhibición
+```
+
+```text
+Posible
+hallazgo
+```
+
+Su objetivo es mostrar mensajes sencillos y fáciles de interpretar.
+
+---
+
+# 📊 28. LCD 16×4
+
+El LCD 16×4 se utiliza para mostrar información más técnica.
+
+Durante el harneado puede utilizar una estructura similar a:
+
+```text
+Tierra: Alta
+Velocidad: ■■■■
+San Fernando
+IA: Conectado
+```
+
+Durante una detección:
+
+```text
+Obj: PUNTA
+Confianza: 84%
+Envio: OK
+ID: 2
+```
+
+Esto permite observar el comportamiento interno del sistema sin conectarlo a un computador.
+
+---
+
+# 🖥️ 29. OLED integrada
+
+La OLED del MATRIX puede utilizarse para información adicional y diagnóstico.
+
+Entre sus funciones se encuentran:
+
+```text
+Pantalla de inicio
+Logo ATOM ArchBot
+Logo Los Harneritos
+Estado del robot
+Modo actual
+Información técnica
+Diagnóstico
+Errores
+```
+
+Al estar integrada en el controlador, es especialmente útil durante las pruebas del prototipo.
+
+---
+
+# 🌈 30. Sistema RGB
+
+ATOM ArchBot utiliza dos barras RGB WS2812B.
+
+Las barras funcionan como una interfaz visual adicional.
+
+Los colores y animaciones pueden representar diferentes eventos.
+
+Conceptualmente:
+
+| Estado | Uso visual |
+|---|---|
+| Inicio | Animación de encendido |
+| Listo | Estado de espera |
+| Harneando | Animación de funcionamiento |
+| Detección | Señal especial |
+| Error | Alerta |
+| Pulsación | Confirmación |
+| Modo prueba | Animación correspondiente |
+
+Las dos barras poseen control independiente.
+
+Esto permite crear animaciones simétricas o diferentes para cada lado.
+
+---
+
+# 🔊 31. Buzzer
+
+El buzzer integrado funciona como interfaz sonora.
+
+No todos los eventos deben utilizar el mismo pitido.
+
+Se pueden diferenciar sonidos para:
+
+```text
+Encendido
+Pulsación
+Inicio de harneado
+Cambio de velocidad
+Movimiento de bandeja
+Bandeja insertada
+Hallazgo
+Error
+Conexión
+Envío correcto
+```
+
+El objetivo es que el usuario pueda reconocer determinadas acciones incluso sin mirar las pantallas.
+
+---
+
+# ⏸️ 32. Pausar el proceso
+
+El Pulsador 2 permite detener temporalmente el proceso.
 
 ```text
 HARNEANDO
@@ -490,332 +1157,896 @@ PAUSADO
 
 Durante la pausa:
 
-* Se detiene el movimiento del harnero.
-* Los servomotores quedan en una posición segura.
-* El sistema mantiene sus datos.
-* Las pantallas indican que el proceso está pausado.
-
-Ejemplo:
-
 ```text
-┌────────────────┐
-│    PAUSADO     │
-│ PULSE CONTINUAR│
-└────────────────┘
+Servos → detenidos
+
+Motores de bandeja → detenidos si corresponde
+
+Estado del proceso → conservado
+
+Pantallas → PAUSADO
 ```
 
-Al volver a pulsarlo:
+Al volver a ejecutar la acción correspondiente:
 
 ```text
 PAUSADO
    ↓
-Pulsador 2
+CONTINUAR
    ↓
 HARNEANDO
 ```
 
----
-
-# 📦 12. Control de la bandeja
-
-ATOM ArchBot posee una bandeja inferior que puede entrar y salir mediante dos motores DC.
+Antes de continuar deben mantenerse las condiciones de seguridad necesarias.
 
 ---
 
-## 📤 Sacar bandeja
+# 📦 33. Sistema de bandeja
 
-El:
+Debajo del harnero existe una bandeja destinada a recibir el material que atraviesa la malla.
 
-### 🔘 Pulsador 3
+La bandeja utiliza dos motores DC.
 
-activa el movimiento de extracción.
+ATOM puede controlar:
+
+```text
+EXTRACCIÓN
+INSERCIÓN
+DETENCIÓN
+```
+
+---
+
+# 📤 34. Sacar la bandeja
+
+La extracción se controla mediante:
+
+```text
+Pulsador 3
+```
+
+Flujo:
 
 ```text
 Pulsador 3
     ↓
-Motores DC
+Comprobar seguridad
+    ↓
+Activar motores DC
     ↓
 SACAR BANDEJA
+    ↓
+Detener motores
 ```
+
+En la configuración de pruebas se puede utilizar un tiempo determinado para la extracción.
+
+Por ejemplo, el movimiento puede mantenerse durante aproximadamente:
+
+```text
+15 segundos
+```
+
+Este tiempo puede ajustarse según la velocidad mecánica real.
 
 ---
 
-## 📥 Insertar bandeja
+# 🛡️ 35. No sacar la bandeja con tierra
 
-El:
+Otra regla de seguridad importante es evitar sacar la bandeja cuando el robot considera que todavía existe una cantidad importante de tierra en el harnero.
 
-### 🔘 Pulsador 4
+La lógica es:
 
-activa el movimiento de inserción.
+```text
+Pulsador SACAR
+      ↓
+¿Existe tierra?
+    /       \
+  SÍ         NO
+  │           │
+  ▼           ▼
+BLOQUEAR     SACAR
+```
+
+Esto ayuda a evitar que el contenido caiga fuera de la bandeja.
+
+Si el usuario intenta realizar la acción:
+
+```text
+NO SE PUEDE
+SACAR BANDEJA
+```
+
+puede mostrarse en pantalla junto con una señal sonora.
+
+---
+
+# 📥 36. Insertar la bandeja
+
+La inserción utiliza:
+
+```text
+Pulsador 4
+```
+
+Secuencia:
 
 ```text
 Pulsador 4
     ↓
-Motores DC
+Activar motores
     ↓
-INSERTAR BANDEJA
+INSERTAR
+    ↓
+Leer final de carrera
+    ↓
+¿ACTIVADO?
+    /    \
+  NO      SÍ
+  │        │
+seguir   detener
 ```
+
+En este movimiento no se depende únicamente de un tiempo.
+
+El final de carrera proporciona información física de que la bandeja llegó a su posición interior.
 
 ---
 
-# 🛑 13. Final de carrera
+# 🛑 37. Final de carrera
 
-Durante la inserción de la bandeja existe un **final de carrera** que permite saber cuándo ésta ha llegado a su posición final.
+El final de carrera se encuentra en la zona interior de la bandeja.
+
+Cuando la bandeja llega:
 
 ```text
-Bandeja entra
-     ↓
-Activa final de carrera
-     ↓
-MATRIX recibe señal
-     ↓
-Detener motores DC
+Bandeja
+   ↓
+Presiona mecanismo
+   ↓
+Final de carrera
+   ↓
+MATRIX detecta señal
 ```
 
-Esto permite evitar que los motores continúen empujando la bandeja después de alcanzar su límite mecánico.
+La lógica eléctrica utilizada es:
+
+```text
+Sin pulsar → HIGH
+Pulsado    → LOW
+```
+
+Al detectar `LOW` durante la inserción:
+
+```text
+DETENER MOTORES
+```
+
+Esto evita que los motores continúen intentando introducir la bandeja después de alcanzar el límite.
 
 ---
 
-# 🏁 14. Finalización del harneado
+# 🔧 38. Microempuje de inserción
 
-Cuando el sistema determine que el proceso ha terminado, ATOM pasa al estado:
+Después de detectar el final de carrera puede utilizarse, si la calibración mecánica lo requiere, un movimiento muy breve y controlado.
+
+Su objetivo no es forzar el mecanismo.
+
+Su función es asegurar que la bandeja quede completamente asentada cuando la geometría del sistema lo necesite.
+
+Este parámetro debe mantenerse pequeño y ajustarse mediante pruebas.
+
+---
+
+# 📍 39. Estado de la bandeja
+
+El software puede mantener un estado interno aproximado:
 
 ```text
-FINALIZADO
+BANDEJA DENTRO
+BANDEJA FUERA
+MOVIÉNDOSE
+DESCONOCIDA
 ```
 
-En esta condición:
-
-* Los servomotores se detienen.
-* Los motores DC quedan apagados.
-* La cámara deja de buscar durante el ciclo actual o queda en espera.
-* Las luces RGB muestran una señal de finalización.
-* El buzzer puede reproducir una melodía.
-* Las pantallas informan al usuario.
+Este estado permite tomar decisiones.
 
 Ejemplo:
 
 ```text
-┌────────────────┐
-│   HARNEADO     │
-│   FINALIZADO   │
-└────────────────┘
+BANDEJA FUERA
++
+Usuario intenta HARNEAR
+=
+BLOQUEAR
 ```
 
 ---
 
-# 🚦 Estados principales del sistema
+# 🧪 40. Modos de prueba
 
-La lógica de ATOM ArchBot se puede representar mediante diferentes estados.
+Durante el desarrollo del robot es necesario poder comprobar subsistemas individualmente sin ejecutar todo el proceso.
 
-| Estado            | Descripción                            |
-| ----------------- | -------------------------------------- |
-| `INICIALIZANDO`   | Preparación de hardware y subsistemas  |
-| `AUTODIAGNOSTICO` | Comprobación inicial de componentes    |
-| `LISTO`           | Robot preparado para comenzar          |
-| `HARNEANDO`       | Harnero funcionando normalmente        |
-| `PAUSADO`         | Proceso detenido temporalmente         |
-| `HALLAZGO`        | Posible objeto detectado               |
-| `ERROR`           | Problema detectado en algún subsistema |
-| `FINALIZADO`      | Ciclo de harneado terminado            |
+Por esta razón ATOM dispone de funciones de prueba.
 
----
-
-# 🧩 Diagrama simplificado de estados
+Estas funciones pueden utilizarse para:
 
 ```text
-                    ┌───────────────┐
-                    │    ENCENDIDO  │
-                    └───────┬───────┘
-                            │
-                            ▼
-                    ┌───────────────┐
-                    │ INICIALIZANDO │
-                    └───────┬───────┘
-                            │
-                            ▼
-                  ┌──────────────────┐
-                  │ AUTODIAGNÓSTICO  │
-                  └────────┬─────────┘
-                           │
-                ┌──────────┴──────────┐
-                │                     │
-              ERROR                   OK
-                │                     │
-                ▼                     ▼
-        ┌───────────────┐      ┌───────────────┐
-        │     ERROR     │      │     LISTO     │
-        └───────────────┘      └───────┬───────┘
-                                       │
-                                    INICIAR
-                                       │
-                                       ▼
-                               ┌───────────────┐
-                         ┌────▶│   HARNEANDO   │◀────┐
-                         │     └───────┬───────┘     │
-                         │             │             │
-                    CONTINUAR       PAUSAR         NO
-                         │             │             │
-                         │             ▼             │
-                         │     ┌───────────────┐     │
-                         └─────│    PAUSADO    │     │
-                               └───────────────┘     │
-                                       │             │
-                               POSIBLE HALLAZGO      │
-                                       │             │
-                                       ▼             │
-                               ┌───────────────┐     │
-                               │   HALLAZGO    │     │
-                               └───────────────┘     │
-                                                     │
-                               ¿PROCESO TERMINÓ? ────┘
-                                       │
-                                      SÍ
-                                       │
-                                       ▼
-                               ┌───────────────┐
-                               │  FINALIZADO   │
-                               └───────────────┘
+Probar sensores ToF
+Ver distancias
+Mover servos
+Calibrar posición inicial
+Probar cámara
+Comprobar detecciones
+Probar RGB
+Probar buzzer
+Comprobar pantallas
+Ver estado de bandeja
+Comprobar comunicaciones
+```
+
+Esto permite calibrar el robot antes de ejecutar un ciclo completo.
+
+---
+
+# 📏 41. Prueba de distancia del harnero
+
+Uno de los modos de prueba permite observar directamente las mediciones de los sensores ToF.
+
+Durante esta prueba las pantallas pueden mostrar valores como:
+
+```text
+ToF IZQ: 124 mm
+ToF DER: 131 mm
+```
+
+Esto permite colocar distintas cantidades de tierra y estudiar cómo cambian las lecturas.
+
+Con esos resultados se pueden definir posteriormente los límites de:
+
+```text
+Tierra baja
+Tierra media
+Tierra alta
+Sin tierra
 ```
 
 ---
 
-# 🧠 Lógica conceptual
+# 🎪 42. Modo Exhibición
 
-De manera simplificada, el programa principal podría seguir la siguiente lógica:
+ATOM también puede disponer de un modo destinado a demostraciones.
+
+El objetivo del modo Exhibición es mostrar las capacidades del robot en una competencia, exposición o presentación sin necesariamente ejecutar todo el ciclo mecánico normal.
+
+Durante este modo pueden mantenerse activos principalmente:
+
+```text
+M-Vision
+Pantallas
+RGB
+Buzzer
+Información de detección
+ATOM.IA
+```
+
+Las funciones mecánicas pueden limitarse según la configuración utilizada durante la demostración.
+
+La prioridad es poder enseñar el funcionamiento de la tecnología de forma segura.
+
+---
+
+# 🔍 43. Detección durante una demostración
+
+En modo de prueba o exhibición se pueden colocar objetos frente a la cámara.
+
+Cuando se detecta uno:
+
+```text
+OBJETO
+   ↓
+M-Vision
+   ↓
+Confianza
+   ↓
+MATRIX
+   ↓
+RGB + sonido
+   ↓
+Pantallas
+   ↓
+ATOM.IA
+```
+
+Así se puede demostrar la visión artificial sin tener que realizar un harneado completo cada vez.
+
+---
+
+# 🔄 44. Funcionamiento sin bloqueos largos
+
+La programación de ATOM busca evitar utilizar esperas largas que congelen todo el sistema.
+
+En lugar de:
+
+```text
+hacer acción
+esperar muchos segundos
+hacer otra acción
+```
+
+se busca trabajar mediante estados y temporizadores.
+
+De esta forma, mientras ocurre una acción, el sistema puede continuar:
+
+```text
+Leyendo pulsadores
+Actualizando pantallas
+Leyendo sensores
+Revisando errores
+Controlando LEDs
+Manteniendo comunicación
+```
+
+Esto hace que la respuesta del robot sea más fluida.
+
+---
+
+# 🧠 45. Máquina de estados
+
+El programa puede entenderse como una máquina de estados.
+
+Los estados principales son:
+
+| Estado | Función |
+|---|---|
+| `INICIALIZANDO` | Preparar hardware |
+| `LISTO` | Esperar al usuario |
+| `HARNEANDO` | Ejecutar movimiento |
+| `PAUSADO` | Detener temporalmente |
+| `HALLAZGO` | Proteger posible objeto |
+| `ERROR` | Bloquear acciones inseguras |
+| `FINALIZADO` | Terminar ciclo |
+| `PRUEBA` | Diagnóstico y calibración |
+| `EXHIBICION` | Demostración del sistema |
+
+Cada estado permite determinadas acciones y bloquea otras.
+
+---
+
+# 🧩 46. Diagrama de estados
+
+```text
+                           ┌────────────────┐
+                           │    ENCENDIDO   │
+                           └───────┬────────┘
+                                   │
+                                   ▼
+                           ┌────────────────┐
+                           │ INICIALIZANDO  │
+                           └───────┬────────┘
+                                   │
+                                   ▼
+                           ┌────────────────┐
+                           │     LISTO      │
+                           └───────┬────────┘
+                                   │
+                               INICIAR
+                                   │
+                                   ▼
+                    ┌────────────────────────┐
+              ┌────▶│       HARNEANDO        │◀─────┐
+              │     └──────┬────────┬────────┘      │
+              │            │        │               │
+              │          PAUSA   HALLAZGO           │
+              │            │        │               │
+              │            ▼        ▼               │
+              │      ┌─────────┐ ┌──────────┐       │
+              └──────│ PAUSADO │ │ HALLAZGO │───────┘
+                     └─────────┘ └──────────┘
+
+Todos los estados
+       │
+       ├──── condición crítica ────▶ ERROR
+       │
+       └──── proceso terminado ────▶ FINALIZADO
+```
+
+---
+
+# 🏁 47. Finalización del harneado
+
+Cuando se determina que el ciclo ha terminado:
+
+```text
+HARNEANDO
+    ↓
+Condición de término
+    ↓
+FINALIZADO
+```
+
+El sistema puede realizar:
+
+```text
+Detener servos
+Detener motores
+Actualizar pantallas
+Cambiar RGB
+Reproducir sonido
+Guardar estado
+Regresar servos a referencia
+```
+
+La pantalla puede indicar:
+
+```text
+HARNEADO
+FINALIZADO
+```
+
+---
+
+# 🛡️ 48. Prioridad de seguridad
+
+En ATOM ArchBot una orden del usuario no necesariamente significa que el robot deba ejecutarla inmediatamente.
+
+Primero se verifica si la acción es segura.
+
+Ejemplo:
+
+```text
+ORDEN DEL USUARIO
+       ↓
+COMPROBAR ESTADO
+       ↓
+¿SE PUEDE?
+   /       \
+ NO         SÍ
+ │           │
+ ▼           ▼
+BLOQUEAR   EJECUTAR
+```
+
+Esto es especialmente importante para:
+
+```text
+Iniciar harneado
+Sacar bandeja
+Insertar bandeja
+Mover servos
+Recuperarse de un error
+```
+
+---
+
+# 🏺 49. Protección de posibles objetos
+
+La finalidad de combinar sensores y visión artificial es reducir acciones mecánicas innecesarias sobre el material.
+
+La estrategia es:
+
+```text
+Mucha tierra
+     ↓
+Harneado más rápido
+     ↓
+Disminuye tierra
+     ↓
+Movimiento más controlado
+     ↓
+Aparece objeto
+     ↓
+Visión lo analiza
+     ↓
+Posible hallazgo
+     ↓
+DETENER
+```
+
+De esta forma el comportamiento puede cambiar durante un mismo ciclo.
+
+---
+
+# 👤 50. Supervisión humana
+
+ATOM ArchBot es un sistema de apoyo.
+
+Cuando informa:
+
+```text
+POSIBLE HALLAZGO
+```
+
+el siguiente paso corresponde al operador.
+
+Una persona debe:
+
+```text
+Detener el proceso si corresponde
+Revisar el objeto
+Retirarlo cuidadosamente
+Evaluarlo
+Decidir si continuar
+```
+
+La inteligencia artificial no reemplaza la evaluación profesional.
+
+---
+
+# 🔬 51. Calibración experimental
+
+El comportamiento final depende de pruebas reales.
+
+Los principales parámetros que deben calibrarse son:
+
+```text
+Posición inicial de servos
+Ángulo máximo de movimiento
+Velocidad lenta
+Velocidad media
+Velocidad rápida
+Distancia ToF con harnero vacío
+Distancia con poca tierra
+Distancia con tierra media
+Distancia con mucha tierra
+Tiempo de extracción
+Posición del final de carrera
+Microempuje
+Umbral de confianza de visión
+Número de frames de confirmación
+Tiempo de rearme
+Iluminación de la cámara
+Sensibilidad ante objetos
+```
+
+Estos valores no deberían elegirse únicamente de forma teórica.
+
+Deben obtenerse realizando pruebas con el robot completamente armado.
+
+---
+
+# 📊 52. Datos disponibles durante las pruebas
+
+Durante la calibración es útil observar:
+
+```text
+ToF izquierdo
+ToF derecho
+Nivel de tierra
+Velocidad actual
+Estado del robot
+Estado bandeja
+Final de carrera
+Objeto detectado
+ID
+Confianza
+Comunicación IA
+```
+
+Esta información permite saber por qué el robot tomó una decisión.
+
+---
+
+# 🔍 53. Diagnóstico
+
+Una de las ventajas de utilizar varias pantallas es disponer de información de diagnóstico sin conectar siempre un computador.
+
+Si el robot no se comporta como se espera, se puede comprobar:
+
+```text
+¿Los sensores están leyendo?
+
+¿La bandeja aparece dentro?
+
+¿La cámara está detectando?
+
+¿El objeto supera la confianza?
+
+¿Los servos están en el nivel correcto?
+
+¿ATOM.IA está conectado?
+
+¿Existe algún estado de error?
+```
+
+---
+
+# 🧠 54. Lógica simplificada del programa
+
+Conceptualmente el programa funciona así:
 
 ```text
 ENCENDER
 
 ↓
-Inicializar componentes
+
+Inicializar hardware
 
 ↓
-Ejecutar autodiagnóstico
+
+Posicionar actuadores
 
 ↓
-SI existe un error:
-    Mostrar error
-    Bloquear inicio
 
-SI todo está correcto:
-    Estado = LISTO
+Inicializar pantallas
 
 ↓
-Esperar botón INICIAR
+
+Inicializar cámara
 
 ↓
-Estado = HARNEANDO
+
+Inicializar sensores
 
 ↓
-Mientras se realiza el harneado:
 
-    Leer sensor láser izquierdo
-    Leer sensor láser derecho
+Comprobar estados
 
-    Calcular nivel aproximado de material
+↓
 
-    Ajustar velocidad de servos
+Estado = LISTO
 
-    Analizar imagen de M-Vision
+↓
 
-    SI existe posible hallazgo:
-        Detener servos
-        Activar RGB
-        Activar buzzer
-        Mostrar alerta
-        Estado = HALLAZGO
+REPETIR CONSTANTEMENTE:
 
-    SI usuario pulsa PAUSA:
-        Detener movimiento
-        Estado = PAUSADO
+    Leer pulsadores
 
-    SI usuario solicita bandeja:
-        Controlar motores DC
+    Leer final de carrera
 
-    SI final de carrera se activa:
-        Detener inserción
+    Leer sensores ToF
+
+    Actualizar estado de bandeja
+
+    Revisar comunicación
+
+    Actualizar pantallas
+
+    Actualizar RGB
+
+    Revisar cámara
+
+
+    SI estado == LISTO:
+
+        Esperar INICIAR
+
+
+    SI usuario pulsa INICIAR:
+
+        Comprobar bandeja
+
+        Comprobar seguridad
+
+        SI condiciones correctas:
+
+            Estado = HARNEANDO
+
+
+    SI estado == HARNEANDO:
+
+        Medir tierra
+
+        Calcular nivel
+
+        Elegir velocidad
+
+        Mover servos
+
+        Analizar detecciones
+
+
+        SI existe hallazgo confirmado:
+
+            Detener servos
+
+            Activar alerta
+
+            Mostrar información
+
+            Enviar evento
+
+            Estado = HALLAZGO
+
+
+        SI usuario pulsa PAUSA:
+
+            Detener servos
+
+            Estado = PAUSADO
+
+
+    SI usuario solicita SACAR BANDEJA:
+
+        Comprobar tierra
+
+        SI es seguro:
+
+            Activar motores hacia afuera
+
+
+    SI usuario solicita INSERTAR BANDEJA:
+
+        Activar motores hacia adentro
+
+        Leer final de carrera
+
+        SI final activado:
+
+            Detener motores
+
+
+    SI existe ERROR:
+
+        Detener actuadores
+
+        Mostrar causa
+
 
     SI proceso termina:
+
         Detener actuadores
+
         Estado = FINALIZADO
 ```
 
 ---
 
-# 🛡️ Principios de funcionamiento
+# 🔗 55. Relación entre todos los sistemas
 
-El diseño de la programación de ATOM ArchBot buscará priorizar:
+ATOM ArchBot no funciona como componentes separados.
 
-### 🏺 Protección del material
+Todos forman parte de un único sistema.
 
-El robot debe evitar movimientos innecesariamente fuertes cuando exista poco material o se detecte un posible objeto.
-
-### 🛑 Seguridad mecánica
-
-Los actuadores deben detenerse ante estados de error, pausa o condiciones que puedan producir un funcionamiento incorrecto.
-
-### 👁️ Confirmación antes de actuar
-
-La visión artificial utilizará diferentes criterios antes de considerar un objeto como posible hallazgo.
-
-### 🧠 Funcionamiento por estados
-
-La programación se organizará mediante estados claramente definidos para evitar acciones contradictorias.
-
-### 👤 Supervisión humana
-
-ATOM ArchBot funciona como una herramienta de **apoyo** al trabajo arqueológico.
-
-Una detección realizada por el sistema debe considerarse un **posible hallazgo**, cuya identificación final corresponde a una persona capacitada.
+```text
+                    ┌───────────────┐
+                    │     TIERRA    │
+                    └───────┬───────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ Sensores ToF  │
+                    └───────┬───────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ MATRIX Mini R4│
+                    └───────┬───────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ Elegir nivel  │
+                    │ de velocidad  │
+                    └───────┬───────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │    SERVOS     │
+                    └───────┬───────┘
+                            │
+                            ▼
+                       HARNEADO
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │   M-Vision    │
+                    └───────┬───────┘
+                            │
+                    ¿Objeto detectado?
+                         /      \
+                       NO        SÍ
+                       │          │
+                       │          ▼
+                       │    ┌────────────┐
+                       │    │ HALLAZGO   │
+                       │    └─────┬──────┘
+                       │          │
+                       │     ┌────┼────┐
+                       │     ▼    ▼    ▼
+                       │    RGB Buzzer Pantallas
+                       │               │
+                       │               ▼
+                       │            ATOM.IA
+                       │
+                       └──── continuar proceso
+```
 
 ---
 
-# 🔬 Desarrollo experimental
+# 🏗️ 56. Filosofía de diseño
 
-Gran parte del comportamiento definitivo será determinado durante las pruebas del prototipo.
+El desarrollo de ATOM ArchBot se basa en cuatro ideas principales.
 
-Será necesario experimentar con:
+## SENSAR
 
-* Distancias de los sensores láser.
-* Velocidad de los servomotores.
-* Ángulos de movimiento.
-* Cantidad de tierra.
-* Sensibilidad de la cámara.
-* Condiciones de iluminación.
-* Umbrales de detección.
-* Número de fotogramas necesarios para confirmar objetos.
-* Tiempo de respuesta de las alertas.
-* Comportamiento de la bandeja.
-* Posición del final de carrera.
+El robot obtiene información de su entorno.
 
-Los resultados obtenidos permitirán ajustar progresivamente el software.
+```text
+ToF
+Cámara
+Final de carrera
+Pulsadores
+```
+
+## ANALIZAR
+
+El MATRIX Mini R4 interpreta la información.
+
+```text
+Distancias
+Estados
+Confianza
+Órdenes
+Condiciones
+```
+
+## ADAPTAR
+
+El comportamiento cambia según la situación.
+
+```text
+Cambiar velocidad
+Detener
+Permitir
+Bloquear
+Alertar
+```
+
+## PROTEGER
+
+Cuando existe una condición que podría poner en riesgo el proceso, ATOM prioriza detenerse.
+
+```text
+Posible hallazgo
+Sin bandeja
+Error
+Condición insegura
+```
 
 ---
 
-# ⚠️ Estado actual del diseño
-
-> [!NOTE]
-> Esta documentación representa el **funcionamiento previsto de ATOM ArchBot antes de completar la programación final**.
->
-> La arquitectura general del sistema está definida, pero los parámetros específicos y algunas decisiones de software podrán cambiar durante la integración, calibración y validación experimental.
->
-> Estos cambios serán documentados a medida que avance el desarrollo.
-
----
-
-# 🏺 ATOM ArchBot
+# 🏺 ATOM ArchBot V3
 
 ### Sistema robótico de apoyo al harneado arqueológico
 
+ATOM ArchBot integra:
+
 ```text
-SENSAR
-   ↓
-ANALIZAR
-   ↓
-ADAPTAR
-   ↓
-PROTEGER
+ROBÓTICA
+    +
+SENSORES
+    +
+VISIÓN ARTIFICIAL
+    +
+AUTOMATIZACIÓN
+    +
+SEGURIDAD
+    +
+INTERFAZ HUMANA
+    +
+ATOM.IA
 ```
 
-El objetivo de ATOM ArchBot es utilizar la robótica y la visión artificial para transformar el harneado en un proceso más **controlado, adaptable y seguro para la conservación de posibles restos arqueológicos**.
+para desarrollar una plataforma capaz de apoyar el proceso de harneado de una forma más controlada y adaptable.
+
+Su funcionamiento puede resumirse en:
+
+```text
+┌─────────┐
+│ SENSAR  │
+└────┬────┘
+     ▼
+┌─────────┐
+│ANALIZAR │
+└────┬────┘
+     ▼
+┌─────────┐
+│ ADAPTAR │
+└────┬────┘
+     ▼
+┌─────────┐
+│PROTEGER │
+└─────────┘
+```
+
+**ATOM ArchBot busca demostrar cómo la robótica y la visión artificial pueden transformarse en herramientas de apoyo para la conservación, investigación y protección del patrimonio arqueológico.**
